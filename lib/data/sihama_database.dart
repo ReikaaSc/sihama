@@ -14,7 +14,7 @@ class SihamaDatabase implements SihamaRepository {
     final databasePath = path.join(await getDatabasesPath(), 'sihama.db');
     _database = await openDatabase(
       databasePath,
-      version: 2,
+      version: 4,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE reports (
@@ -45,15 +45,42 @@ class SihamaDatabase implements SihamaRepository {
             address TEXT NOT NULL
           )
         ''');
+        await db.execute('''
+          CREATE TABLE local_orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            customer TEXT NOT NULL,
+            products TEXT NOT NULL,
+            item_count INTEGER NOT NULL CHECK (item_count > 0),
+            total INTEGER NOT NULL CHECK (total >= 0),
+            date TEXT NOT NULL,
+            status TEXT NOT NULL
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE local_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sender TEXT NOT NULL,
+            body TEXT NOT NULL,
+            date TEXT NOT NULL
+          )
+        ''');
 
         final batch = db.batch();
         batch.insert('reports', {
-          'id': 'SIH-240618',
-          'crop': 'Padi sawah',
+          'id': 'L-1051',
+          'crop': 'Cabai',
+          'location': 'Petak Selatan',
+          'description': 'Bercak gelap terlihat pada buah cabai.',
+          'date': DateTime(2025, 5, 15, 8, 24).toIso8601String(),
+          'status': 'Diajukan',
+        });
+        batch.insert('reports', {
+          'id': 'L-1042',
+          'crop': 'Padi',
           'location': 'Petak Utara',
           'description': 'Daun menguning di beberapa bagian.',
-          'date': DateTime(2025, 6, 18, 8, 24).toIso8601String(),
-          'status': 'Diajukan',
+          'date': DateTime(2025, 5, 12, 8, 24).toIso8601String(),
+          'status': 'Selesai Ditinjau',
         });
         batch.insert('products', {
           'name': 'Kocide 54 WDG',
@@ -99,6 +126,41 @@ class SihamaDatabase implements SihamaRepository {
             {'name': 'Budi Santoso'},
             where: 'id = ? AND name = ?',
             whereArgs: [1, 'Pak Budi'],
+          );
+        }
+        if (oldVersion < 3) {
+          await db.execute('''
+            CREATE TABLE local_orders (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              customer TEXT NOT NULL,
+              products TEXT NOT NULL,
+              item_count INTEGER NOT NULL CHECK (item_count > 0),
+              total INTEGER NOT NULL CHECK (total >= 0),
+              date TEXT NOT NULL,
+              status TEXT NOT NULL
+            )
+          ''');
+        }
+        if (oldVersion < 4) {
+          await db.execute('''
+            CREATE TABLE local_messages (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              sender TEXT NOT NULL,
+              body TEXT NOT NULL,
+              date TEXT NOT NULL
+            )
+          ''');
+          await db.insert(
+            'reports',
+            {
+              'id': 'L-1042',
+              'crop': 'Padi',
+              'location': 'Petak Utara',
+              'description': 'Daun menguning di beberapa bagian.',
+              'date': DateTime(2025, 5, 12, 8, 24).toIso8601String(),
+              'status': 'Selesai Ditinjau',
+            },
+            conflictAlgorithm: ConflictAlgorithm.ignore,
           );
         }
       },
@@ -215,6 +277,59 @@ class SihamaDatabase implements SihamaRepository {
       whereArgs: [id],
     );
     _requireUpdated(deleted, 'Profil');
+  }
+
+  Future<int> createLocalOrder(LocalOrder order) async =>
+      (await _db).insert('local_orders', order.toMap());
+
+  Future<int> checkoutLocalOrder(
+    LocalOrder order,
+    Map<int, int> productQuantities,
+  ) async {
+    final database = await _db;
+    return database.transaction((transaction) async {
+      for (final entry in productQuantities.entries) {
+        final rows = await transaction.query(
+          'products',
+          columns: ['stock'],
+          where: 'id = ?',
+          whereArgs: [entry.key],
+          limit: 1,
+        );
+        if (rows.isEmpty || (rows.first['stock']! as int) < entry.value) {
+          throw StateError('Stok produk tidak mencukupi. Perbarui keranjang Anda.');
+        }
+        await transaction.rawUpdate(
+          'UPDATE products SET stock = stock - ? WHERE id = ?',
+          [entry.value, entry.key],
+        );
+      }
+      return transaction.insert('local_orders', order.toMap());
+    });
+  }
+
+  Future<List<LocalOrder>> getLocalOrders() async {
+    final rows = await (await _db).query('local_orders', orderBy: 'date DESC');
+    return rows.map(LocalOrder.fromMap).toList();
+  }
+
+  Future<void> updateLocalOrderStatus(int id, String status) async {
+    final changed = await (await _db).update(
+      'local_orders',
+      {'status': status},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    _requireUpdated(changed, 'Pesanan');
+  }
+
+  Future<void> createLocalMessage(LocalMessage message) async {
+    await (await _db).insert('local_messages', message.toMap());
+  }
+
+  Future<List<LocalMessage>> getLocalMessages() async {
+    final rows = await (await _db).query('local_messages', orderBy: 'date ASC');
+    return rows.map(LocalMessage.fromMap).toList();
   }
 
   void _requireUpdated(int count, String entity) {

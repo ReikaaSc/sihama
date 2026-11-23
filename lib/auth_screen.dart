@@ -2,9 +2,9 @@ import 'package:material_ui/material_ui.dart';
 
 import 'data/sihama_role.dart';
 
-const _forest = Color(0xFF173F2D);
-const _green = Color(0xFF285E4D);
-const _muted = Color(0xFF68786F);
+const _forest = Color(0xFF25813A);
+const _green = Color(0xFF1E6A30);
+const _muted = Color(0xFF55645A);
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key, required this.onAuthenticated});
@@ -36,9 +36,8 @@ class _AuthScreenState extends State<AuthScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final title = _isRegistering ? 'Buat akun SIHAMA' : 'Selamat datang';
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F9F6),
+      backgroundColor: const Color(0xFFF5F8F5),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -52,15 +51,15 @@ class _AuthScreenState extends State<AuthScreen> {
                   children: [
                     const CircleAvatar(
                       radius: 34,
-                      backgroundColor: Color(0xFFE2F1E8),
-                      child: Icon(Icons.eco_rounded, size: 36, color: _forest),
+                      backgroundColor: _forest,
+                      child: Icon(Icons.eco_rounded, size: 34, color: Colors.white),
                     ),
                     const SizedBox(height: 14),
                     const Text(
                       'SIHAMA',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: _forest,
+                        color: _green,
                         fontSize: 30,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 0.6,
@@ -74,10 +73,10 @@ class _AuthScreenState extends State<AuthScreen> {
                     ),
                     const SizedBox(height: 30),
                     Text(
-                      title,
+                      _isRegistering ? 'Daftar Akun' : 'Masuk',
                       style: const TextStyle(
                         color: _forest,
-                        fontSize: 23,
+                        fontSize: 20,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
@@ -106,9 +105,9 @@ class _AuthScreenState extends State<AuthScreen> {
                           label: Text(role.label),
                           selected: selected,
                           onSelected: (_) => _selectRole(role),
-                          selectedColor: const Color(0xFFDCEDE4),
+                          selectedColor: _forest,
                           labelStyle: TextStyle(
-                            color: selected ? _forest : _muted,
+                            color: selected ? Colors.white : _muted,
                             fontWeight: FontWeight.w600,
                           ),
                           side: BorderSide(

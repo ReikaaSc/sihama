@@ -102,6 +102,66 @@ class FarmerProfile {
   );
 }
 
+class LocalOrder {
+  const LocalOrder({
+    this.id,
+    required this.customer,
+    required this.products,
+    required this.itemCount,
+    required this.total,
+    required this.date,
+    this.status = 'Dipesan',
+  });
+
+  final int? id;
+  final String customer;
+  final String products;
+  final int itemCount;
+  final int total;
+  final DateTime date;
+  final String status;
+
+  Map<String, Object?> toMap() => {
+    if (id != null) 'id': id,
+    'customer': customer,
+    'products': products,
+    'item_count': itemCount,
+    'total': total,
+    'date': date.toIso8601String(),
+    'status': status,
+  };
+
+  factory LocalOrder.fromMap(Map<String, Object?> map) => LocalOrder(
+    id: map['id']! as int,
+    customer: map['customer']! as String,
+    products: map['products']! as String,
+    itemCount: map['item_count']! as int,
+    total: map['total']! as int,
+    date: DateTime.parse(map['date']! as String),
+    status: map['status']! as String,
+  );
+}
+
+class LocalMessage {
+  const LocalMessage({required this.sender, required this.body, required this.date});
+
+  final String sender;
+  final String body;
+  final DateTime date;
+
+  Map<String, Object?> toMap() => {
+    'sender': sender,
+    'body': body,
+    'date': date.toIso8601String(),
+  };
+
+  factory LocalMessage.fromMap(Map<String, Object?> map) => LocalMessage(
+    sender: map['sender']! as String,
+    body: map['body']! as String,
+    date: DateTime.parse(map['date']! as String),
+  );
+}
+
 abstract interface class SihamaRepository {
   Future<void> initialize();
   Future<List<CropReport>> getReports();

@@ -1,37 +1,43 @@
 # SIHAMA
 
-SIHAMA is a Flutter prototype for reporting crop pests and diseases, reviewing
-reports, and browsing or managing agricultural products. The interface follows
-the role-based SIHAMA prototype for Pelapor, Penyuluh, and Mitra Toko.
+SIHAMA adalah prototipe Flutter untuk melaporkan hama dan penyakit tanaman,
+meninjau laporan, serta melihat dan mengelola produk pertanian. Antarmukanya
+mendukung tiga peran: Pelapor, Penyuluh, dan Mitra Toko.
 
-## Demo roles
+## Peran demo
 
-The opening screen lets you select a role and sign in or switch to the
-registration form. Demo credentials are prefilled for each role; any valid
-email and password of at least six characters can enter the local demo. Login,
-registration, document selection, notifications, and sample order records are
-not connected to a server.
+Pada layar awal, pilih peran lalu masuk atau beralih ke formulir pendaftaran.
+Kredensial demo telah terisi untuk setiap peran. Email yang valid dan kata
+sandi minimal enam karakter dapat digunakan untuk masuk ke demo lokal. Login
+dan pendaftaran tetap berupa alur demo lokal; pemilihan dokumen memakai contoh
+lokal dan tidak mengunggah berkas ke server.
 
-## Local CRUD data
+## Data lokal
 
-The Android app stores data in a local SQLite database using `sqflite`. Data is
-kept on the device and is not synchronized to a server.
+Aplikasi Android menyimpan data di basis data SQLite lokal menggunakan
+`sqflite`. Data tersimpan di perangkat dan tidak disinkronkan ke server.
 
-The app supports create, read, update, and delete operations for:
+Aplikasi mendukung operasi buat, baca, ubah, dan hapus untuk:
 
-- Crop reports: Pelapor can submit from **Buat Laporan Sekarang**, review from
-  **Laporan**, and use the report menu to edit or delete. Penyuluh can review
-  the same local report queue.
-- AgriMarket products: Mitra Toko can use **Tambah produk** to create products
-  and each product menu to edit or delete name, category, price, and stock.
-- Farmer profile: create a profile when none exists, edit it from **Profil**,
-  or delete it from the profile screen.
+- **Laporan tanaman:** Pelapor dapat mengirim laporan melalui **Buat Laporan
+  Sekarang**, melihat laporan melalui **Laporan**, serta mengubah atau
+  menghapusnya dari menu laporan. Penyuluh dapat meninjau antrean laporan
+  lokal yang sama.
+- **Produk AgriMarket:** Mitra Toko dapat membuat produk melalui **Tambah
+  produk**, lalu menggunakan menu produk untuk mengubah atau menghapus nama,
+  kategori, harga, dan stok. Pelapor dapat mengisi keranjang, membuat pesanan,
+  dan mengurangi stok yang tersedia.
+- **Profil petani:** Buat profil jika belum tersedia, ubah melalui **Profil**,
+  atau hapus dari layar profil.
+- **Pesanan dan percakapan:** Pesanan baru serta pesan dengan penyuluh disimpan
+  di SQLite lokal pada perangkat.
 
-Example records are inserted the first time the database is created. Adviser
-reference entries and shop order/notification examples are prototype-only and
-are not stored in SQLite.
+Data contoh laporan, produk, dan profil dimasukkan saat basis data pertama kali
+dibuat. Pesanan contoh, referensi penyakit, serta notifikasi masih merupakan
+data demo; transaksi pesanan dan percakapan yang dibuat pengguna tersimpan di
+SQLite.
 
-## Run and test
+## Menjalankan dan menguji aplikasi
 
 ```powershell
 flutter pub get
@@ -40,11 +46,11 @@ flutter test
 flutter analyze
 ```
 
-## Build Android APK
+## Membuat APK Android
 
 ```powershell
 flutter build apk --release
 ```
 
-The redesigned release APK is copied to
+APK rilis dengan desain yang diperbarui disalin ke
 `apk_output/sihama-figma-redesign-release.apk`.
