@@ -2,9 +2,9 @@ import 'package:material_ui/material_ui.dart';
 
 import 'data/sihama_role.dart';
 
-const _forest = Color(0xFF25813A);
-const _green = Color(0xFF1E6A30);
-const _muted = Color(0xFF55645A);
+const _forest = Color(0xFF173F2D);
+const _green = Color(0xFF285E4D);
+const _muted = Color(0xFF68786F);
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key, required this.onAuthenticated});
@@ -36,8 +36,9 @@ class _AuthScreenState extends State<AuthScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final title = _isRegistering ? 'Buat akun SIHAMA' : 'Selamat datang';
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F8F5),
+      backgroundColor: const Color(0xFFF7F9F6),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -49,38 +50,15 @@ class _AuthScreenState extends State<AuthScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const CircleAvatar(
-                      radius: 34,
-                      backgroundColor: _forest,
-                      child: Icon(Icons.eco_rounded, size: 34, color: Colors.white),
-                    ),
-                    const SizedBox(height: 14),
-                    const Text(
-                      'SIHAMA',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: _green,
-                        fontSize: 30,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.6,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Sistem Informasi Hama dan Penyakit Tanaman',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: _muted, fontSize: 14),
-                    ),
-                    const SizedBox(height: 30),
                     Text(
-                      _isRegistering ? 'Daftar Akun' : 'Masuk',
+                      title,
                       style: const TextStyle(
                         color: _forest,
-                        fontSize: 20,
+                        fontSize: 26,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    const SizedBox(height: 5),
+                    const SizedBox(height: 6),
                     Text(
                       _isRegistering
                           ? 'Daftar untuk melanjutkan ke layanan SIHAMA.'
@@ -105,9 +83,9 @@ class _AuthScreenState extends State<AuthScreen> {
                           label: Text(role.label),
                           selected: selected,
                           onSelected: (_) => _selectRole(role),
-                          selectedColor: _forest,
+                          selectedColor: const Color(0xFFDCEDE4),
                           labelStyle: TextStyle(
-                            color: selected ? Colors.white : _muted,
+                            color: selected ? _forest : _muted,
                             fontWeight: FontWeight.w600,
                           ),
                           side: BorderSide(

@@ -1,9 +1,11 @@
+import 'dart:convert';
+
 import 'package:path/path.dart' as path;
 import 'package:sqflite/sqflite.dart';
 
 import 'sihama_repository.dart';
 
-class SihamaDatabase implements SihamaRepository {
+class SihamaDatabase implements SihamaRepository, SihamaChatRepository {
   SihamaDatabase();
 
   Database? _database;
@@ -14,7 +16,7 @@ class SihamaDatabase implements SihamaRepository {
     final databasePath = path.join(await getDatabasesPath(), 'sihama.db');
     _database = await openDatabase(
       databasePath,
-      version: 4,
+      version: 8,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE reports (
@@ -23,7 +25,10 @@ class SihamaDatabase implements SihamaRepository {
             location TEXT NOT NULL,
             description TEXT NOT NULL,
             date TEXT NOT NULL,
-            status TEXT NOT NULL
+            status TEXT NOT NULL,
+            photo_bytes BLOB,
+            diagnosis TEXT,
+            recommendation TEXT
           )
         ''');
         await db.execute('''
@@ -32,9 +37,13 @@ class SihamaDatabase implements SihamaRepository {
             name TEXT NOT NULL,
             category TEXT NOT NULL,
             price INTEGER NOT NULL CHECK (price >= 0),
-            stock INTEGER NOT NULL DEFAULT 0 CHECK (stock >= 0)
+            stock INTEGER NOT NULL DEFAULT 0 CHECK (stock >= 0),
+            description TEXT NOT NULL DEFAULT '',
+            photo_bytes BLOB
           )
         ''');
+        await db.execute(_marketOrdersTable);
+        await db.execute(_chatMessagesTable);
         await db.execute('''
           CREATE TABLE farmer_profiles (
             id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -45,42 +54,15 @@ class SihamaDatabase implements SihamaRepository {
             address TEXT NOT NULL
           )
         ''');
-        await db.execute('''
-          CREATE TABLE local_orders (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            customer TEXT NOT NULL,
-            products TEXT NOT NULL,
-            item_count INTEGER NOT NULL CHECK (item_count > 0),
-            total INTEGER NOT NULL CHECK (total >= 0),
-            date TEXT NOT NULL,
-            status TEXT NOT NULL
-          )
-        ''');
-        await db.execute('''
-          CREATE TABLE local_messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            sender TEXT NOT NULL,
-            body TEXT NOT NULL,
-            date TEXT NOT NULL
-          )
-        ''');
 
         final batch = db.batch();
         batch.insert('reports', {
-          'id': 'L-1051',
-          'crop': 'Cabai',
-          'location': 'Petak Selatan',
-          'description': 'Bercak gelap terlihat pada buah cabai.',
-          'date': DateTime(2025, 5, 15, 8, 24).toIso8601String(),
-          'status': 'Diajukan',
-        });
-        batch.insert('reports', {
-          'id': 'L-1042',
-          'crop': 'Padi',
+          'id': 'SIH-240618',
+          'crop': 'Padi sawah',
           'location': 'Petak Utara',
           'description': 'Daun menguning di beberapa bagian.',
-          'date': DateTime(2025, 5, 12, 8, 24).toIso8601String(),
-          'status': 'Selesai Ditinjau',
+          'date': DateTime(2025, 6, 18, 8, 24).toIso8601String(),
+          'status': 'Diajukan',
         });
         batch.insert('products', {
           'name': 'Kocide 54 WDG',
@@ -106,6 +88,8 @@ class SihamaDatabase implements SihamaRepository {
           'price': 68000,
           'stock': 3,
         });
+        _addSampleOrders(batch);
+        _addSampleChatMessages(batch);
         batch.insert('farmer_profiles', {
           'id': 1,
           'name': 'Budi Santoso',
@@ -129,39 +113,36 @@ class SihamaDatabase implements SihamaRepository {
           );
         }
         if (oldVersion < 3) {
-          await db.execute('''
-            CREATE TABLE local_orders (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              customer TEXT NOT NULL,
-              products TEXT NOT NULL,
-              item_count INTEGER NOT NULL CHECK (item_count > 0),
-              total INTEGER NOT NULL CHECK (total >= 0),
-              date TEXT NOT NULL,
-              status TEXT NOT NULL
-            )
-          ''');
+          await db.execute('ALTER TABLE reports ADD COLUMN photo_bytes BLOB');
         }
         if (oldVersion < 4) {
-          await db.execute('''
-            CREATE TABLE local_messages (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              sender TEXT NOT NULL,
-              body TEXT NOT NULL,
-              date TEXT NOT NULL
-            )
-          ''');
-          await db.insert(
-            'reports',
-            {
-              'id': 'L-1042',
-              'crop': 'Padi',
-              'location': 'Petak Utara',
-              'description': 'Daun menguning di beberapa bagian.',
-              'date': DateTime(2025, 5, 12, 8, 24).toIso8601String(),
-              'status': 'Selesai Ditinjau',
-            },
-            conflictAlgorithm: ConflictAlgorithm.ignore,
+          await db.execute(_marketOrdersTable);
+          final batch = db.batch();
+          _addSampleOrders(batch);
+          await batch.commit(noResult: true);
+        }
+        if (oldVersion < 5) {
+          await db.execute('ALTER TABLE reports ADD COLUMN diagnosis TEXT');
+          await db.execute(
+            'ALTER TABLE reports ADD COLUMN recommendation TEXT',
           );
+        }
+        if (oldVersion >= 4 && oldVersion < 6) {
+          await db.execute(
+            'ALTER TABLE market_orders ADD COLUMN transfer_proof_bytes BLOB',
+          );
+        }
+        if (oldVersion < 7) {
+          await db.execute(
+            "ALTER TABLE products ADD COLUMN description TEXT NOT NULL DEFAULT ''",
+          );
+          await db.execute('ALTER TABLE products ADD COLUMN photo_bytes BLOB');
+        }
+        if (oldVersion < 8) {
+          await db.execute(_chatMessagesTable);
+          final batch = db.batch();
+          _addSampleChatMessages(batch);
+          await batch.commit(noResult: true);
         }
       },
     );
@@ -193,6 +174,33 @@ class SihamaDatabase implements SihamaRepository {
       whereArgs: [report.id],
     );
     _requireUpdated(changed, 'Laporan');
+  }
+
+  @override
+  Future<List<ChatMessage>> getChatMessages(String reportId) async {
+    final rows = await (await _db).query(
+      'chat_messages',
+      where: 'report_id = ?',
+      whereArgs: [reportId],
+      orderBy: 'sent_at ASC, id ASC',
+    );
+    return rows.map(ChatMessage.fromMap).toList();
+  }
+
+  @override
+  Future<void> addChatMessage(ChatMessage message) async {
+    final text = message.text.trim();
+    if (text.isEmpty) return;
+    await (await _db).insert(
+      'chat_messages',
+      ChatMessage(
+        reportId: message.reportId,
+        senderRole: message.senderRole,
+        senderName: message.senderName,
+        text: text,
+        sentAt: message.sentAt,
+      ).toMap(),
+    );
   }
 
   @override
@@ -243,6 +251,72 @@ class SihamaDatabase implements SihamaRepository {
   }
 
   @override
+  Future<List<MarketOrder>> getOrders() async {
+    final rows = await (await _db).query('market_orders', orderBy: 'date DESC');
+    return rows.map(MarketOrder.fromMap).toList();
+  }
+
+  @override
+  Future<void> createOrder(MarketOrder order) async {
+    if (order.items.isEmpty) {
+      throw ArgumentError.value(order.items, 'order.items');
+    }
+    await (await _db).transaction((txn) async {
+      for (final item in order.items) {
+        if (item.quantity <= 0) {
+          throw ArgumentError.value(item.quantity, 'item.quantity');
+        }
+        final changed = await txn.rawUpdate(
+          'UPDATE products SET stock = stock - ? WHERE id = ? AND stock >= ?',
+          [item.quantity, item.productId, item.quantity],
+        );
+        if (changed != 1) {
+          throw StateError(
+            'Stok ${item.productName} tidak mencukupi untuk pesanan.',
+          );
+        }
+      }
+      await txn.insert('market_orders', order.toMap());
+    });
+  }
+
+  @override
+  Future<void> updateOrder(MarketOrder order) async {
+    final db = await _db;
+    await db.transaction((txn) async {
+      final rows = await txn.query(
+        'market_orders',
+        where: 'id = ?',
+        whereArgs: [order.id],
+        limit: 1,
+      );
+      if (rows.isEmpty) throw StateError('Pesanan tidak ditemukan.');
+      final current = MarketOrder.fromMap(rows.first.cast<String, Object?>());
+      if (current.status == order.status) return;
+      if (!_canTransitionOrder(current.status, order.status)) {
+        throw StateError(
+          'Status pesanan tidak dapat diubah dari ${current.status} menjadi ${order.status}.',
+        );
+      }
+      if (order.status == 'Dibatalkan' && current.status != 'Dibatalkan') {
+        for (final item in current.items) {
+          await txn.rawUpdate(
+            'UPDATE products SET stock = stock + ? WHERE id = ?',
+            [item.quantity, item.productId],
+          );
+        }
+      }
+      final changed = await txn.update(
+        'market_orders',
+        order.toMap(),
+        where: 'id = ?',
+        whereArgs: [order.id],
+      );
+      _requireUpdated(changed, 'Pesanan');
+    });
+  }
+
+  @override
   Future<FarmerProfile?> getProfile() async {
     final rows = await (await _db).query(
       'farmer_profiles',
@@ -279,62 +353,150 @@ class SihamaDatabase implements SihamaRepository {
     _requireUpdated(deleted, 'Profil');
   }
 
-  Future<int> createLocalOrder(LocalOrder order) async =>
-      (await _db).insert('local_orders', order.toMap());
-
-  Future<int> checkoutLocalOrder(
-    LocalOrder order,
-    Map<int, int> productQuantities,
-  ) async {
-    final database = await _db;
-    return database.transaction((transaction) async {
-      for (final entry in productQuantities.entries) {
-        final rows = await transaction.query(
-          'products',
-          columns: ['stock'],
-          where: 'id = ?',
-          whereArgs: [entry.key],
-          limit: 1,
-        );
-        if (rows.isEmpty || (rows.first['stock']! as int) < entry.value) {
-          throw StateError('Stok produk tidak mencukupi. Perbarui keranjang Anda.');
-        }
-        await transaction.rawUpdate(
-          'UPDATE products SET stock = stock - ? WHERE id = ?',
-          [entry.value, entry.key],
-        );
-      }
-      return transaction.insert('local_orders', order.toMap());
-    });
-  }
-
-  Future<List<LocalOrder>> getLocalOrders() async {
-    final rows = await (await _db).query('local_orders', orderBy: 'date DESC');
-    return rows.map(LocalOrder.fromMap).toList();
-  }
-
-  Future<void> updateLocalOrderStatus(int id, String status) async {
-    final changed = await (await _db).update(
-      'local_orders',
-      {'status': status},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-    _requireUpdated(changed, 'Pesanan');
-  }
-
-  Future<void> createLocalMessage(LocalMessage message) async {
-    await (await _db).insert('local_messages', message.toMap());
-  }
-
-  Future<List<LocalMessage>> getLocalMessages() async {
-    final rows = await (await _db).query('local_messages', orderBy: 'date ASC');
-    return rows.map(LocalMessage.fromMap).toList();
-  }
-
   void _requireUpdated(int count, String entity) {
     if (count != 1) {
       throw StateError('$entity tidak ditemukan atau sudah dihapus.');
     }
+  }
+
+  static const _marketOrdersTable = '''
+    CREATE TABLE market_orders (
+      id TEXT PRIMARY KEY,
+      customer_name TEXT NOT NULL,
+      date TEXT NOT NULL,
+      status TEXT NOT NULL,
+      items TEXT NOT NULL,
+      total INTEGER NOT NULL CHECK (total >= 0),
+      transfer_proof_bytes BLOB
+    )
+  ''';
+
+  static const _chatMessagesTable = '''
+    CREATE TABLE chat_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      report_id TEXT NOT NULL,
+      sender_role TEXT NOT NULL,
+      sender_name TEXT NOT NULL,
+      message TEXT NOT NULL,
+      sent_at TEXT NOT NULL
+    )
+  ''';
+
+  static void _addSampleChatMessages(Batch batch) {
+    batch.insert('chat_messages', {
+      'report_id': 'SIH-240618',
+      'sender_role': 'penyuluh',
+      'sender_name': 'Ir. Siti Rahmawati',
+      'message': 'Daun menguning bisa disebabkan hawar. Apakah bercaknya meluas setelah hujan?',
+      'sent_at': DateTime(2025, 6, 18, 9, 20).toIso8601String(),
+    });
+    batch.insert('chat_messages', {
+      'report_id': 'SIH-240618',
+      'sender_role': 'pelapor',
+      'sender_name': 'Budi Santoso',
+      'message': 'Belum meluas, Bu. Saya sudah mengurangi pupuk urea.',
+      'sent_at': DateTime(2025, 6, 18, 9, 32).toIso8601String(),
+    });
+    batch.insert('chat_messages', {
+      'report_id': 'SIH-240618',
+      'sender_role': 'penyuluh',
+      'sender_name': 'Ir. Siti Rahmawati',
+      'message': 'Baik. Pantau kondisi tanaman dan kirim kabar lagi jika bercak bertambah.',
+      'sent_at': DateTime(2025, 6, 18, 9, 45).toIso8601String(),
+    });
+  }
+
+  static void _addSampleOrders(Batch batch) {
+    final samples = [
+      (
+        'P-2198',
+        'Hendra',
+        DateTime(2025, 5, 10),
+        'Selesai',
+        [
+          {
+            'product_id': 4,
+            'product_name': 'Dithane M-45 80 WP',
+            'quantity': 1,
+            'unit_price': 68000,
+          },
+        ],
+        68000,
+      ),
+      (
+        'P-2205',
+        'Wahyuni',
+        DateTime(2025, 5, 15),
+        'Dikirim',
+        [
+          {
+            'product_id': 1,
+            'product_name': 'Kocide 54 WDG',
+            'quantity': 3,
+            'unit_price': 85000,
+          },
+        ],
+        255000,
+      ),
+      (
+        'P-2207',
+        'Sutrisno',
+        DateTime(2025, 5, 16),
+        'Dipesan',
+        [
+          {
+            'product_id': 3,
+            'product_name': 'Score 250 EC',
+            'quantity': 1,
+            'unit_price': 142000,
+          },
+          {
+            'product_id': 4,
+            'product_name': 'Dithane M-45 80 WP',
+            'quantity': 2,
+            'unit_price': 68000,
+          },
+        ],
+        278000,
+      ),
+      (
+        'P-2201',
+        'Budi Santoso',
+        DateTime(2025, 5, 13),
+        'Diproses',
+        [
+          {
+            'product_id': 2,
+            'product_name': 'Nordox 56 WP',
+            'quantity': 2,
+            'unit_price': 72000,
+          },
+        ],
+        144000,
+      ),
+    ];
+    for (final sample in samples) {
+      batch.insert('market_orders', {
+        'id': sample.$1,
+        'customer_name': sample.$2,
+        'date': sample.$3.toIso8601String(),
+        'status': sample.$4,
+        'items': jsonEncode(sample.$5),
+        'total': sample.$6,
+      });
+    }
+  }
+
+  static bool _canTransitionOrder(String current, String next) {
+    if (current == next) return true;
+    if (next == 'Dibatalkan') {
+      return current == 'Dipesan' || current == 'Diproses';
+    }
+    return switch (current) {
+      'Dipesan' => next == 'Diproses',
+      'Diproses' => next == 'Dikirim',
+      'Dikirim' => next == 'Selesai',
+      _ => false,
+    };
   }
 }

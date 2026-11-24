@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 import 'auth_screen.dart';
+import 'data/report_image.dart';
 import 'data/sihama_repository.dart';
 import 'data/sihama_role.dart';
 import 'sihama_shell.dart';
@@ -10,9 +11,10 @@ void main() {
 }
 
 class SihamaApp extends StatefulWidget {
-  const SihamaApp({super.key, this.repository});
+  const SihamaApp({super.key, this.repository, this.imagePicker});
 
   final SihamaRepository? repository;
+  final ReportImagePicker? imagePicker;
 
   @override
   State<SihamaApp> createState() => _SihamaAppState();
@@ -36,6 +38,7 @@ class _SihamaAppState extends State<SihamaApp> {
           : SihamaShell(
               key: ValueKey(_role),
               repository: widget.repository,
+              imagePicker: widget.imagePicker,
               role: _role!,
               onLogout: () => setState(() => _role = null),
             ),

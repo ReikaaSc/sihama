@@ -1,24 +1,29 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/services.dart';
 
+import 'data/report_image.dart';
 import 'data/sihama_database.dart';
 import 'data/sihama_repository.dart';
 import 'data/sihama_role.dart';
 
-const _forest = Color(0xFF25813A);
-const _green = Color(0xFF1E6A30);
-const _ink = Color(0xFF1B2A1F);
-const _muted = Color(0xFF55645A);
-const _surface = Color(0xFFF5F8F5);
+const _forest = Color(0xFF173F2D);
+const _green = Color(0xFF285E4D);
+const _ink = Color(0xFF183B2E);
+const _muted = Color(0xFF5E6F68);
+const _surface = Color(0xFFF3F7F4);
+const _unspecifiedCrop = 'Tanaman';
 
 class SihamaShell extends StatefulWidget {
   const SihamaShell({
     super.key,
     this.repository,
+    this.imagePicker,
     this.role = SihamaRole.pelapor,
     this.onLogout,
   });
 
   final SihamaRepository? repository;
+  final ReportImagePicker? imagePicker;
   final SihamaRole role;
   final VoidCallback? onLogout;
 
@@ -29,13 +34,22 @@ class SihamaShell extends StatefulWidget {
 class _SihamaShellState extends State<SihamaShell> {
   int _selectedIndex = 0;
   bool _showReportForm = false;
+  bool _showConversations = false;
   late final SihamaRepository _repository =
       widget.repository ?? SihamaDatabase();
+  late final SihamaChatRepository _chatRepository =
+      _repository is SihamaChatRepository
+      ? _repository as SihamaChatRepository
+      : _FallbackChatRepository();
   List<CropReport> _reports = [];
   List<MarketProduct> _products = [];
+  List<MarketOrder> _orders = [];
   FarmerProfile? _profile;
   bool _loading = true;
   Object? _loadError;
+
+  bool get _hasReviewedReport =>
+      _reports.any((report) => report.status == 'Selesai Ditinjau');
 
   @override
   void initState() {
@@ -49,11 +63,13 @@ class _SihamaShellState extends State<SihamaShell> {
       await _repository.initialize();
       final reports = await _repository.getReports();
       final products = await _repository.getProducts();
+      final orders = await _repository.getOrders();
       final profile = await _repository.getProfile();
       if (!mounted) return;
       setState(() {
         _reports = reports;
         _products = products;
+        _orders = orders;
         _profile = profile;
         _loadError = null;
         _loading = false;
@@ -93,70 +109,85 @@ class _SihamaShellState extends State<SihamaShell> {
       return Scaffold(
         backgroundColor: _surface,
         body: SafeArea(
-          child: Column(
-            children: [
-              Expanded(
-                child: Center(
-                  child: _loading
-                      ? const CircularProgressIndicator()
-                      : Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.storage_rounded,
-                                size: 40,
-                                color: _green,
-                              ),
-                              const SizedBox(height: 12),
-                              const Text(
-                                'Data SIHAMA gagal dimuat.',
-                                style: TextStyle(
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.w700,
-                                  color: _ink,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                '$_loadError',
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(color: _muted),
-                              ),
-                              const SizedBox(height: 16),
-                              FilledButton(
-                                onPressed: _loadData,
-                                child: const Text('Coba lagi'),
-                              ),
-                            ],
-                          ),
+          child: Center(
+            child: _loading
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 72,
+                        height: 72,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFDCEDE4),
+                          borderRadius: BorderRadius.circular(24),
                         ),
-                ),
-              ),
-            ],
+                        child: const Icon(Icons.eco_rounded, size: 38, color: _green),
+                      ),
+                      const SizedBox(height: 20),
+                      const SizedBox(
+                        width: 28,
+                        height: 28,
+                        child: CircularProgressIndicator(strokeWidth: 3),
+                      ),
+                      const SizedBox(height: 14),
+                      const Text(
+                        'Menyiapkan akun Anda',
+                        style: TextStyle(color: _ink, fontSize: 16, fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 5),
+                      const Text('Memuat data dan percakapan?', style: TextStyle(color: _muted, fontSize: 12)),
+                    ],
+                  )
+                : Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.storage_rounded, size: 40, color: _green),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Data gagal dimuat.',
+                          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: _ink),
+                        ),
+                        const SizedBox(height: 8),
+                        Text('$_loadError', textAlign: TextAlign.center, style: const TextStyle(color: _muted)),
+                        const SizedBox(height: 16),
+                        FilledButton(onPressed: _loadData, child: const Text('Coba lagi')),
+                      ],
+                    ),
+                  ),
           ),
         ),
       );
     }
 
+    final reviewedReports = _reports
+        .where((report) => report.status == 'Selesai Ditinjau')
+        .toList();
     final pages = <Widget>[
       if (widget.role == SihamaRole.pelapor)
         _HomeTab(
           latestReport: _reports.isEmpty ? null : _reports.first,
+          reviewedReport: reviewedReports.isEmpty
+              ? null
+              : reviewedReports.first,
           onCreateReport: () => setState(() {
             _selectedIndex = 1;
             _showReportForm = true;
+            _showConversations = false;
           }),
           onOpenHistory: () => setState(() {
             _selectedIndex = 1;
             _showReportForm = false;
+            _showConversations = false;
           }),
           onOpenReport: (report) => _showReportDetails(context, report),
+          onOpenConversations: () => setState(() => _showConversations = true),
         ),
       if (widget.role == SihamaRole.pelapor)
         _showReportForm
             ? _ReportTab(
+                imagePicker: widget.imagePicker ?? pickReportImage,
                 onCancel: () => setState(() => _showReportForm = false),
                 onSubmit: (report) async {
                   final saved = await _runMutation(
@@ -189,17 +220,31 @@ class _SihamaShellState extends State<SihamaShell> {
           onDelete: _deleteReport,
         ),
       if (widget.role == SihamaRole.penyuluh) const _DiseaseDatabaseTab(),
-      if (widget.role == SihamaRole.mitraToko) const _ShopOrdersTab(),
+      if (widget.role == SihamaRole.mitraToko)
+        _ShopOrdersTab(orders: _orders, onUpdateOrder: _updateOrder),
       if (widget.role != SihamaRole.penyuluh)
         _MarketTab(
           products: _products,
+          canOrder: _hasReviewedReport,
           canManage: widget.role == SihamaRole.mitraToko,
-          onCheckout: () => _loadData(showLoading: false),
+          imagePicker: widget.imagePicker ?? pickReportImage,
+          onCheckout: _checkoutOrder,
+          onChangeStock: _changeProductStock,
           onCreate: _createProduct,
           onEdit: _editProduct,
           onDelete: _deleteProduct,
         ),
-      _NotificationsTab(role: widget.role),
+      _NotificationsTab(
+        role: widget.role,
+        reports: _reports,
+        orders: _orders,
+        customerName: _profile?.name ?? 'Petani SIHAMA',
+        onOpenReport: (report) => _showReportDetails(context, report),
+        onOpenOrder: (order) => _showOrderDetails(context, order),
+        onOpenChat: () => _openConversation(
+          _reports.isEmpty ? null : _reports.first,
+        ),
+      ),
       _ProfileTab(
         profile: _profile,
         role: widget.role,
@@ -207,8 +252,24 @@ class _SihamaShellState extends State<SihamaShell> {
         onDelete: _deleteProfile,
         onLogout: widget.onLogout,
         reportCount: _reports.length,
+        orderCount: widget.role == SihamaRole.mitraToko
+            ? _orders.length
+            : _orders
+                  .where((order) => order.customerName == _profile?.name)
+                  .length,
       ),
     ];
+    if (widget.role == SihamaRole.pelapor &&
+        _selectedIndex == 0 &&
+        _showConversations) {
+      pages[0] = _ConversationTab(
+        onBack: () => setState(() => _showConversations = false),
+        report: _reports.isEmpty ? null : _reports.first,
+        onOpenChat: () => _openConversation(
+          _reports.isEmpty ? null : _reports.first,
+        ),
+      );
+    }
 
     final navigationItems = switch (widget.role) {
       SihamaRole.pelapor => _BottomNavigation.reporterItems,
@@ -221,63 +282,237 @@ class _SihamaShellState extends State<SihamaShell> {
       body: SafeArea(
         child: IndexedStack(index: _selectedIndex, children: pages),
       ),
-      bottomNavigationBar: _BottomNavigation(
-        items: navigationItems,
-        selectedIndex: _selectedIndex,
-        onSelected: (index) => setState(() => _selectedIndex = index),
-      ),
+      bottomNavigationBar: _showConversations
+          ? null
+          : _BottomNavigation(
+              items: navigationItems,
+              selectedIndex: _selectedIndex,
+              onSelected: (index) => setState(() => _selectedIndex = index),
+            ),
     );
   }
 
   void _showReportDetails(BuildContext context, CropReport report) {
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      backgroundColor: Colors.white,
-      builder: (context) => Padding(
-        padding: const EdgeInsets.fromLTRB(22, 8, 22, 30),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '#${report.id}',
-              style: const TextStyle(
-                color: _green,
-                fontWeight: FontWeight.w700,
-              ),
+    final recommendedProducts = _recommendedProducts(report, _products);
+    if (widget.role == SihamaRole.penyuluh) {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => _AdviserReportScreen(
+            report: report,
+            products: _products,
+            onOpenChat: () => _openConversation(report),
+            onSave: (updated) => _runMutation(
+              'Diagnosis laporan ${report.id} berhasil disimpan.',
+              () => _repository.updateReport(updated),
             ),
-            const SizedBox(height: 8),
-            Text(
-              '${report.crop} - ${report.location}',
-              style: const TextStyle(
-                color: _ink,
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-              ),
+          ),
+        ),
+      );
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => Scaffold(
+          backgroundColor: _surface,
+          appBar: AppBar(
+            backgroundColor: Colors.white,
+            foregroundColor: _ink,
+            elevation: 0,
+            titleSpacing: 0,
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Laporan ${report.id}',
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                Text(
+                  '${_reportTitle(report)} · ${_formatDate(report.date)}',
+                  style: const TextStyle(fontSize: 11, color: _muted),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            _StatusBadge(status: report.status),
-            const SizedBox(height: 16),
-            Text(report.description, style: const TextStyle(color: _muted)),
-            const SizedBox(height: 10),
-            Text(
-              _formatDate(report.date),
-              style: const TextStyle(color: _muted),
-            ),
-            if (report.status == 'Selesai Ditinjau') ...[
-              const SizedBox(height: 18),
-              const Text(
-                'Rekomendasi',
-                style: TextStyle(color: _ink, fontWeight: FontWeight.w700),
+          ),
+          body: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+            children: [
+              if (report.photoBytes != null) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Image.memory(
+                    report.photoBytes!,
+                    height: 190,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ] else
+                Container(
+                  height: 160,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFD7F0D3), Color(0xFFB8DF9B)],
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.eco_outlined,
+                    size: 38,
+                    color: _green,
+                  ),
+                ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(child: _StatusBadge(status: report.status)),
+                  Text(
+                    'Pelapor: ${_profile?.name ?? 'Petani SIHAMA'}',
+                    style: const TextStyle(fontSize: 11, color: _muted),
+                  ),
+                ],
               ),
-              const SizedBox(height: 6),
-              const Text(
-                'Ikuti arahan petugas dan pantau kondisi tanaman secara berkala.',
-                style: TextStyle(color: _muted),
+              const SizedBox(height: 12),
+              _DetailCard(
+                title: 'Gejala dilaporkan',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _SymptomChips(description: report.description),
+                    const SizedBox(height: 8),
+                    Text(report.description, style: const TextStyle(color: _muted, height: 1.4, fontSize: 12)),
+                    const SizedBox(height: 9),
+                    _InsightBanner(
+                      text: report.diagnosis == null
+                          ? 'Indikasi awal: menunggu peninjauan penyuluh.'
+                          : 'Diagnosis penyuluh: ${report.diagnosis}',
+                    ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: OutlinedButton.icon(
+                        onPressed: report.status == 'Selesai Ditinjau'
+                            ? null
+                            : () {
+                                Navigator.pop(context);
+                                WidgetsBinding.instance.addPostFrameCallback((_) {
+                                  if (mounted) _editReport(report);
+                                });
+                              },
+                        icon: const Icon(Icons.edit_outlined, size: 16),
+                        label: const Text('Ubah Gejala'),
+                      ),
+                    ),
+                  ],
+                ),
               ),
+              if (report.status == 'Diajukan' ||
+                  report.status == 'Ditinjau') ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF3D5),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.schedule_rounded, color: Color(0xFF946313)),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Menunggu peninjauan penyuluh. Anda akan menerima notifikasi setelah laporan selesai ditinjau.',
+                          style: TextStyle(
+                            color: Color(0xFF72500E),
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ] else ...[
+                const SizedBox(height: 12),
+                _DetailCard(
+                  title: 'Diagnosis Penyuluh',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [const Icon(Icons.medical_services_outlined, color: _green, size: 18), const SizedBox(width: 7), Expanded(child: Text(report.diagnosis ?? 'Diagnosis belum tersedia', style: const TextStyle(color: _ink, fontWeight: FontWeight.w700)))]),
+                      const SizedBox(height: 8),
+                      Text(report.recommendation ?? 'Ikuti arahan petugas dan pantau kondisi tanaman secara berkala.', style: const TextStyle(color: _muted, height: 1.4, fontSize: 12)),
+                    ],
+                  ),
+                ),
+                if (report.status == 'Selesai Ditinjau') ...[
+                  const SizedBox(height: 12),
+                  _DetailCard(
+                    title: 'Rekomendasi Obat',
+                    child: Column(
+                      children: [
+                        if (recommendedProducts.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.only(bottom: 10),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text('Belum ada obat tersedia di AgriMarket.', style: TextStyle(color: _muted, fontSize: 11)),
+                            ),
+                          ),
+                        ...recommendedProducts.map((product) => Padding(
+                          padding: const EdgeInsets.only(bottom: 9),
+                          child: Row(children: [
+                            Container(width: 38, height: 38, decoration: BoxDecoration(color: const Color(0xFFDDF0D8), borderRadius: BorderRadius.circular(10)), child: Icon(_productIcon(product.category), color: _green, size: 20)),
+                            const SizedBox(width: 9),
+                            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(product.name, style: const TextStyle(color: _ink, fontWeight: FontWeight.w700, fontSize: 12)), Text(product.category, style: const TextStyle(color: _muted, fontSize: 10))])),
+                            Text(_formatPrice(product.price), style: const TextStyle(color: _green, fontWeight: FontWeight.w800, fontSize: 11)),
+                          ]),
+                        )),
+                        SizedBox(width: double.infinity, child: FilledButton.icon(
+                          onPressed: () { Navigator.pop(context); setState(() => _selectedIndex = 2); },
+                          icon: const Icon(Icons.shopping_bag_outlined),
+                          label: const Text('Lihat Obat & Pesan'),
+                        )),
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () => _openConversation(report),
+                  icon: const Icon(Icons.chat_bubble_outline_rounded),
+                  label: const Text('Chat dengan Penyuluh'),
+                ),
+              ],
             ],
-          ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showOrderDetails(BuildContext context, MarketOrder order) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => _OrderDetailScreen(order: order)),
+    );
+  }
+
+  void _openConversation([CropReport? report]) {
+    final conversationReport = report ?? (_reports.isEmpty ? null : _reports.first);
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => _ChatScreen(
+          repository: _chatRepository,
+          role: widget.role,
+          reportId: conversationReport?.id ?? 'general',
+          reportCaption: conversationReport == null
+              ? 'Konsultasi pertanian'
+              : '${conversationReport.id} · ${_reportTitle(conversationReport)}',
+          reportStatus: conversationReport?.status ?? 'Sesi aktif',
+          reporterName: _profile?.name ?? 'Budi Santoso',
         ),
       ),
     );
@@ -305,9 +540,12 @@ class _SihamaShellState extends State<SihamaShell> {
   }
 
   Future<void> _createProduct() async {
-    final product = await showDialog<MarketProduct>(
-      context: context,
-      builder: (context) => const _ProductFormDialog(),
+    final product = await Navigator.of(context).push<MarketProduct>(
+      MaterialPageRoute<MarketProduct>(
+        builder: (_) => _ProductFormScreen(
+          imagePicker: widget.imagePicker ?? pickReportImage,
+        ),
+      ),
     );
     if (product != null) {
       await _runMutation('Produk berhasil ditambahkan.', () async {
@@ -316,10 +554,54 @@ class _SihamaShellState extends State<SihamaShell> {
     }
   }
 
+  Future<bool> _checkoutOrder(
+    List<MarketOrderItem> items,
+    ReportImage paymentProof,
+  ) async {
+    final now = DateTime.now();
+    final order = MarketOrder(
+      id: 'P-${now.microsecondsSinceEpoch}',
+      customerName: _profile?.name ?? 'Petani SIHAMA',
+      date: now,
+      status: 'Dipesan',
+      items: items,
+      transferProofBytes: paymentProof.bytes,
+    );
+    return _runMutation(
+      'Pesanan ${order.id} berhasil dibuat.',
+      () => _repository.createOrder(order),
+    );
+  }
+
+  Future<bool> _changeProductStock(MarketProduct product, int stock) {
+    return _runMutation('Stok ${product.name} diperbarui.', () {
+      return _repository.updateProduct(MarketProduct(
+        id: product.id,
+        name: product.name,
+        category: product.category,
+        price: product.price,
+        stock: stock,
+        description: product.description,
+        photoBytes: product.photoBytes,
+      ));
+    });
+  }
+
+  Future<bool> _updateOrder(MarketOrder order, String status) async {
+    return _runMutation(
+      'Status pesanan ${order.id} diperbarui.',
+      () => _repository.updateOrder(order.copyWith(status: status)),
+    );
+  }
+
   Future<void> _editProduct(MarketProduct product) async {
-    final updated = await showDialog<MarketProduct>(
-      context: context,
-      builder: (context) => _ProductFormDialog(product: product),
+    final updated = await Navigator.of(context).push<MarketProduct>(
+      MaterialPageRoute<MarketProduct>(
+        builder: (_) => _ProductFormScreen(
+          product: product,
+          imagePicker: widget.imagePicker ?? pickReportImage,
+        ),
+      ),
     );
     if (updated != null) {
       await _runMutation(
@@ -362,16 +644,81 @@ class _SihamaShellState extends State<SihamaShell> {
 
   Future<void> _deleteProfile() async {
     final profile = _profile;
-    if (profile == null ||
-        !await _confirmDelete(context, 'profil ${profile.name}')) {
-      return;
-    }
-    await _runMutation(
-      'Profil berhasil dihapus.',
-      () => _repository.deleteProfile(profile.id),
+    final subject = profile == null ? 'akun pelapor' : 'akun ${profile.name}';
+    if (!await _confirmDelete(context, subject)) return;
+    final secondConfirmation = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Konfirmasi terakhir'),
+        content: const Text(
+          'Akun dan profil lokal akan dihapus. Tindakan ini tidak dapat dibatalkan. Lanjutkan?',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Batal')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFF9B4038)),
+            child: const Text('Ya, hapus akun'),
+          ),
+        ],
+      ),
     );
+    if (secondConfirmation != true) return;
+
+    final deleted = profile == null
+        ? true
+        : await _runMutation(
+            'Akun berhasil dihapus.',
+            () => _repository.deleteProfile(profile.id),
+          );
+    if (deleted && mounted) widget.onLogout?.call();
   }
 
+  void _openNotifications() {
+    setState(() {
+      _selectedIndex = switch (widget.role) {
+        SihamaRole.pelapor => 3,
+        SihamaRole.penyuluh || SihamaRole.mitraToko => 2,
+      };
+    });
+  }
+}
+
+class _TopBar extends StatelessWidget {
+  const _TopBar({required this.onNotifications});
+
+  final VoidCallback onNotifications;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(20, 12, 16, 12),
+      color: _forest,
+      child: Row(
+        children: [
+          const Text(
+            'SIHAMA',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 26,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.4,
+            ),
+          ),
+          const Spacer(),
+          IconButton(
+            onPressed: onNotifications,
+            tooltip: 'Notifikasi',
+            icon: const Icon(
+              Icons.notifications_none_rounded,
+              color: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _BottomNavigation extends StatelessWidget {
@@ -441,17 +788,54 @@ class _BottomNavigation extends StatelessWidget {
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(14),
                         color: selected
-                            ? const Color(0xFFDDF3E1)
+                            ? const Color(0xFFE7F2ED)
                             : Colors.transparent,
                       ),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
-                            item.icon,
-                            size: 21,
-                            color: selected ? _green : const Color(0xFF68776D),
-                          ),
+                          if (item.label == 'Notifikasi')
+                            Stack(
+                              clipBehavior: Clip.none,
+                              children: [
+                                Icon(
+                                  item.icon,
+                                  size: 21,
+                                  color: selected
+                                      ? _green
+                                      : const Color(0xFF6F7D74),
+                                ),
+                                Positioned(
+                                  right: -7,
+                                  top: -5,
+                                  child: Container(
+                                    width: 14,
+                                    height: 14,
+                                    alignment: Alignment.center,
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFFC62828),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Text(
+                                      '2',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            )
+                          else
+                            Icon(
+                              item.icon,
+                              size: 21,
+                              color: selected
+                                  ? _green
+                                  : const Color(0xFF6F7D74),
+                            ),
                           const SizedBox(height: 3),
                           Text(
                             item.label,
@@ -464,7 +848,7 @@ class _BottomNavigation extends StatelessWidget {
                                   : FontWeight.w500,
                               color: selected
                                   ? _green
-                                  : const Color(0xFF68776D),
+                                  : const Color(0xFF6F7D74),
                             ),
                           ),
                         ],
@@ -484,15 +868,19 @@ class _BottomNavigation extends StatelessWidget {
 class _HomeTab extends StatelessWidget {
   const _HomeTab({
     required this.latestReport,
+    required this.reviewedReport,
     required this.onCreateReport,
     required this.onOpenHistory,
     required this.onOpenReport,
+    required this.onOpenConversations,
   });
 
   final CropReport? latestReport;
+  final CropReport? reviewedReport;
   final VoidCallback onCreateReport;
   final VoidCallback onOpenHistory;
   final ValueChanged<CropReport> onOpenReport;
+  final VoidCallback onOpenConversations;
 
   @override
   Widget build(BuildContext context) {
@@ -501,14 +889,17 @@ class _HomeTab extends StatelessWidget {
       children: [
         Stack(
           clipBehavior: Clip.none,
+          alignment: Alignment.bottomCenter,
           children: [
+            const SizedBox(height: 190),
             Container(
+              height: 166,
               width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(20, 24, 20, 76),
+              padding: const EdgeInsets.fromLTRB(18, 14, 18, 48),
               decoration: const BoxDecoration(
-                color: _forest,
+                color: Color(0xFF25833E),
                 borderRadius: BorderRadius.vertical(
-                  bottom: Radius.circular(28),
+                  bottom: Radius.circular(24),
                 ),
               ),
               child: Row(
@@ -518,77 +909,141 @@ class _HomeTab extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Selamat pagi,', style: TextStyle(color: Colors.white70)),
+                        Text(
+                          'Selamat pagi,',
+                          style: TextStyle(color: Colors.white70, fontSize: 12),
+                        ),
                         SizedBox(height: 3),
-                        Text('Budi Santoso', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w800)),
-                        SizedBox(height: 5),
-                        Text('Bagaimana kondisi tanaman Anda hari ini?', style: TextStyle(color: Colors.white, fontSize: 13)),
+                        Text(
+                          'Budi Santoso',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          'Bagaimana kondisi tanaman Anda hari ini?',
+                          style: TextStyle(color: Colors.white, fontSize: 12),
+                        ),
                       ],
                     ),
                   ),
-                  IconButton.filledTonal(
+                  _UnreadIconButton(
+                    icon: Icons.chat_bubble_outline_rounded,
+                    count: 1,
                     tooltip: 'Percakapan',
-                    onPressed: () => _showLocalConversation(context),
-                    style: IconButton.styleFrom(
-                      backgroundColor: Colors.white.withValues(alpha: .2),
-                      foregroundColor: Colors.white,
-                    ),
-                    icon: const Icon(Icons.chat_bubble_outline_rounded),
+                    onPressed: onOpenConversations,
                   ),
                 ],
               ),
             ),
             Positioned(
-              left: 16,
-              right: 16,
-              bottom: -8,
+              left: 18,
+              right: 18,
+              bottom: 0,
               child: SizedBox(
-                height: 64,
-                child: FilledButton.icon(
+                height: 52,
+                child: ElevatedButton.icon(
                   onPressed: onCreateReport,
-                  style: FilledButton.styleFrom(
+                  style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
-                    foregroundColor: _green,
-                    elevation: 2,
-                    side: const BorderSide(color: Color(0xFFD7F0DA)),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    foregroundColor: const Color(0xFF23833D),
+                    elevation: 3,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
                   ),
-                  icon: const Icon(Icons.add_a_photo_outlined),
-                  label: const Text('Buat Laporan Sekarang', style: TextStyle(fontWeight: FontWeight.w700)),
+                  icon: const Icon(Icons.camera_alt_outlined, size: 18),
+                  label: const Text(
+                    'Buat Laporan Sekarang',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
                 ),
               ),
             ),
           ],
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 30, 16, 24),
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Laporan Terakhir', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: _ink)),
-                  TextButton(onPressed: onOpenHistory, child: const Text('Lihat semua')),
+                  const Text(
+                    'Laporan Terakhir',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: _ink,
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: onOpenHistory,
+                    child: const Text('Lihat semua'),
+                  ),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 4),
               if (latestReport == null)
-                const _EmptyState(icon: Icons.assignment_outlined, title: 'Belum ada laporan', message: 'Buat laporan pertama untuk melihat perkembangannya.')
+                const _EmptyState(
+                  icon: Icons.assignment_outlined,
+                  title: 'Belum ada laporan',
+                  message:
+                      'Buat laporan pertama untuk melihat perkembangannya.',
+                )
               else
-                _ReportCard(report: latestReport!, onTap: () => onOpenReport(latestReport!)),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(color: Colors.white, border: Border.all(color: const Color(0xFFE1E8E2)), borderRadius: BorderRadius.circular(16)),
-                child: const Row(
-                  children: [
-                    Icon(Icons.eco_outlined, color: _green, size: 26),
-                    SizedBox(width: 12),
-                    Expanded(child: Text('Pantau kondisi tanaman secara berkala dan konsultasikan gejala baru kepada penyuluh.', style: TextStyle(color: _muted, height: 1.4))),
-                  ],
+                _HomeReportCard(
+                  report: latestReport!,
+                  onTap: () => onOpenReport(latestReport!),
                 ),
-              ),
+              if (reviewedReport != null) ...[
+                const SizedBox(height: 10),
+                Material(
+                  color: const Color(0xFFE0F4E4),
+                  borderRadius: BorderRadius.circular(14),
+                  child: InkWell(
+                    onTap: () => onOpenReport(reviewedReport!),
+                    borderRadius: BorderRadius.circular(14),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 13,
+                        vertical: 12,
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.check_circle_outline_rounded,
+                            color: Color(0xFF21803D),
+                            size: 20,
+                          ),
+                          const SizedBox(width: 9),
+                          Expanded(
+                            child: Text(
+                              'Laporan ${reviewedReport!.id} sudah ditinjau. Lihat rekomendasi obat.',
+                              style: const TextStyle(
+                                color: _ink,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          const Icon(
+                            Icons.arrow_forward_rounded,
+                            color: _green,
+                            size: 18,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 20),
+              const _WorkflowCard(),
             ],
           ),
         ),
@@ -597,167 +1052,132 @@ class _HomeTab extends StatelessWidget {
   }
 }
 
-Future<void> _showLocalConversation(BuildContext context) async {
-  final controller = TextEditingController();
-  final database = SihamaDatabase();
-  await database.initialize();
-  var messages = await database.getLocalMessages();
-  if (messages.isEmpty) {
-    await database.createLocalMessage(LocalMessage(
-      sender: 'Penyuluh',
-      body: 'Selamat pagi, Pak Budi. Ada yang bisa saya bantu terkait tanaman Anda?',
-      date: DateTime.now(),
-    ));
-    messages = await database.getLocalMessages();
-  }
-  showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.white,
-    builder: (sheetContext) => StatefulBuilder(
-      builder: (context, setSheetState) => Padding(
-        padding: EdgeInsets.fromLTRB(18, 12, 18, 18 + MediaQuery.viewInsetsOf(context).bottom),
-        child: SizedBox(
-          height: MediaQuery.sizeOf(context).height * .62,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Percakapan Penyuluh', style: TextStyle(color: _ink, fontSize: 20, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 4),
-              const Text('Pesan tersimpan lokal di perangkat ini.', style: TextStyle(color: _muted, fontSize: 12)),
-              const Divider(height: 24),
-              Expanded(
-                child: ListView.builder(
-                  itemCount: messages.length,
-                  itemBuilder: (context, index) => Align(
-                    alignment: messages[index].sender == 'Penyuluh' ? Alignment.centerLeft : Alignment.centerRight,
-                    child: Container(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      padding: const EdgeInsets.all(12),
-                      constraints: const BoxConstraints(maxWidth: 280),
-                      decoration: BoxDecoration(color: messages[index].sender == 'Penyuluh' ? const Color(0xFFEAF5EC) : _forest, borderRadius: BorderRadius.circular(14)),
-                      child: Text(messages[index].body, style: TextStyle(color: messages[index].sender == 'Penyuluh' ? _ink : Colors.white)),
-                    ),
-                  ),
-                ),
+class _UnreadIconButton extends StatelessWidget {
+  const _UnreadIconButton({
+    required this.icon,
+    required this.count,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final int count;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        IconButton(
+          onPressed: onPressed,
+          tooltip: tooltip,
+          style: IconButton.styleFrom(
+            backgroundColor: Colors.white.withValues(alpha: 0.18),
+            foregroundColor: Colors.white,
+          ),
+          icon: Icon(icon, size: 21),
+        ),
+        Positioned(
+          right: 0,
+          top: 0,
+          child: Container(
+            padding: const EdgeInsets.all(3),
+            decoration: const BoxDecoration(
+              color: Color(0xFFC62828),
+              shape: BoxShape.circle,
+            ),
+            constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+            child: Text(
+              '$count',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
               ),
-              Row(
-                children: [
-                  Expanded(child: TextField(controller: controller, decoration: _inputDecoration('Tulis pesan'))),
-                  const SizedBox(width: 8),
-                  IconButton.filled(
-                    tooltip: 'Kirim pesan',
-                    onPressed: () async {
-                      final text = controller.text.trim();
-                      if (text.isEmpty) return;
-                      await database.createLocalMessage(LocalMessage(
-                        sender: 'Budi Santoso',
-                        body: text,
-                        date: DateTime.now(),
-                      ));
-                      final updated = await database.getLocalMessages();
-                      setSheetState(() => messages = updated);
-                      controller.clear();
-                    },
-                    icon: const Icon(Icons.send_rounded),
-                  ),
-                ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _HomeReportCard extends StatelessWidget {
+  const _HomeReportCard({required this.report, required this.onTap});
+
+  final CropReport report;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD8F0D5),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: const Icon(Icons.eco_outlined, color: _green),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      report.crop == _unspecifiedCrop
+                          ? report.id
+                          : '${report.crop} · ${report.id}',
+                      style: const TextStyle(
+                        color: _ink,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    _StatusBadge(status: report.status),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Indikasi awal: ${_initialDiagnosis(report.crop)}',
+                      style: const TextStyle(color: _muted, fontSize: 10),
+                    ),
+                    Text(
+                      '${report.status == 'Selesai Ditinjau' ? 'Ditinjau penyuluh' : 'Menunggu penyuluh'} · ${_formatDate(report.date).split(' - ').first}',
+                      style: const TextStyle(color: _muted, fontSize: 10),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
         ),
       ),
-    ),
-  ).whenComplete(controller.dispose);
-}
-
-class _AssistantCard extends StatelessWidget {
-  const _AssistantCard({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(26),
-        gradient: const LinearGradient(
-          colors: [Color(0xFFB2D9B4), Color(0xFF9CC8A0)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(26),
-        child: Stack(
-          children: [
-            const Positioned.fill(child: CustomPaint(painter: _FieldPainter())),
-            Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.28),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(Icons.eco_rounded, color: _forest),
-                      ),
-                      const SizedBox(width: 10),
-                      const Text(
-                        'Asisten tanaman',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: _ink,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  const Text(
-                    'Ada perubahan pada tanaman?',
-                    style: TextStyle(
-                      fontSize: 23,
-                      fontWeight: FontWeight.w800,
-                      color: _ink,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Foto gejalanya dan dapatkan indikasi awal dengan mudah.',
-                    style: TextStyle(fontSize: 14, color: Color(0xFF2B4B3D)),
-                  ),
-                  const SizedBox(height: 18),
-                  ElevatedButton.icon(
-                    onPressed: onTap,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _forest,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                    ),
-                    icon: const Icon(Icons.camera_alt_rounded, size: 18),
-                    label: const Text('Buat Laporan Sekarang'),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
+
+String _initialDiagnosis(String crop) => switch (crop.toLowerCase()) {
+  'cabai' => 'Antraknosa',
+  'tomat' => 'Layu Fusarium',
+  _ => 'Hawar daun',
+};
+
+String _reportTitle(CropReport report) => report.crop == _unspecifiedCrop
+    ? report.location
+    : '${report.crop} - ${report.location}';
 
 class _WorkflowCard extends StatelessWidget {
   const _WorkflowCard();
@@ -782,7 +1202,7 @@ class _WorkflowCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Alur penanganan',
+            'Alur Kerja SIHAMA',
             style: TextStyle(
               color: _ink,
               fontSize: 17,
@@ -825,13 +1245,851 @@ class _WorkflowCard extends StatelessWidget {
   }
 }
 
+class _ConversationTab extends StatefulWidget {
+  const _ConversationTab({
+    required this.onBack,
+    required this.onOpenChat,
+    required this.report,
+  });
+
+  final VoidCallback onBack;
+  final VoidCallback onOpenChat;
+  final CropReport? report;
+
+  @override
+  State<_ConversationTab> createState() => _ConversationTabState();
+}
+
+class _ConversationTabState extends State<_ConversationTab> {
+  final _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final report = widget.report;
+    final reportCaption = report == null
+        ? 'Konsultasi pertanian'
+        : '${report.id} · ${_reportTitle(report)}';
+    final visible = 'ir siti rahmawati $reportCaption'.toLowerCase().contains(
+      _searchController.text.trim().toLowerCase(),
+    );
+
+    return Column(
+      children: [
+        Container(
+          color: Colors.white,
+          padding: const EdgeInsets.fromLTRB(8, 8, 16, 12),
+          child: Row(
+            children: [
+              IconButton(
+                onPressed: widget.onBack,
+                tooltip: 'Kembali',
+                icon: const Icon(Icons.arrow_back_rounded),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Percakapan',
+                      style: TextStyle(
+                        color: _ink,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      'Sesi chat dengan penyuluh',
+                      style: TextStyle(color: _muted, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
+            children: [
+              TextField(
+                controller: _searchController,
+                onChanged: (_) => setState(() {}),
+                decoration: _inputDecoration('Cari nama, laporan, atau pesan')
+                    .copyWith(
+                      prefixIcon: const Icon(
+                        Icons.search_rounded,
+                        color: _muted,
+                      ),
+                      isDense: true,
+                    ),
+              ),
+              const SizedBox(height: 10),
+              if (visible)
+                Material(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  child: InkWell(
+                    onTap: widget.onOpenChat,
+                    borderRadius: BorderRadius.circular(14),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        children: [
+                          const CircleAvatar(
+                            backgroundColor: Color(0xFFD8F0D5),
+                            child: Text(
+                              'SR',
+                              style: TextStyle(
+                                color: _green,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        'Ir. Siti Rahmawati',
+                                        style: TextStyle(
+                                          color: _ink,
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ),
+                                    Text(
+                                      '09.30',
+                                      style: TextStyle(
+                                        color: _green,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                SizedBox(height: 3),
+                                Text(
+                                  reportCaption,
+                                  style: TextStyle(color: _muted, fontSize: 10),
+                                ),
+                                SizedBox(height: 3),
+                                Text(
+                                  'Bercak terlihat sudah tidak melebar...',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(color: _ink, fontSize: 11),
+                                ),
+                                SizedBox(height: 5),
+                                _ActiveChatBadge(),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            width: 18,
+                            height: 18,
+                            alignment: Alignment.center,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF21803D),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Text(
+                              '1',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ChatScreen extends StatefulWidget {
+  const _ChatScreen({
+    required this.repository,
+    required this.role,
+    required this.reportId,
+    required this.reportCaption,
+    required this.reportStatus,
+    required this.reporterName,
+  });
+
+  final SihamaChatRepository repository;
+  final SihamaRole role;
+  final String reportId;
+  final String reportCaption;
+  final String reportStatus;
+  final String reporterName;
+
+  @override
+  State<_ChatScreen> createState() => _ChatScreenState();
+}
+
+class _ChatScreenState extends State<_ChatScreen> {
+  final _controller = TextEditingController();
+  late Future<List<ChatMessage>> _messagesFuture;
+
+  bool get _isMine => widget.role == SihamaRole.pelapor;
+  String get _myName => _isMine ? widget.reporterName : 'Ir. Siti Rahmawati';
+  String get _partnerName => _isMine ? 'Ir. Siti Rahmawati' : widget.reporterName;
+
+  @override
+  void initState() {
+    super.initState();
+    _messagesFuture = widget.repository.getChatMessages(widget.reportId);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _send() async {
+    final value = _controller.text.trim();
+    if (value.isEmpty) return;
+    _controller.clear();
+    try {
+      await widget.repository.addChatMessage(ChatMessage(
+        reportId: widget.reportId,
+        senderRole: widget.role.name,
+        senderName: _myName,
+        text: value,
+        sentAt: DateTime.now(),
+      ));
+      if (!mounted) return;
+      setState(() => _messagesFuture = widget.repository.getChatMessages(widget.reportId));
+    } catch (error) {
+      if (!mounted) return;
+      _controller.text = value;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Pesan gagal disimpan: $error')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF0F4F1),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        foregroundColor: _ink,
+        elevation: 0,
+        titleSpacing: 0,
+        title: Row(
+          children: [
+            CircleAvatar(
+              radius: 16,
+              backgroundColor: Color(0xFFD8F0D5),
+              child: Text(_initials(_partnerName), style: const TextStyle(color: _green, fontSize: 11)),
+            ),
+            const SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _partnerName,
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+                ),
+                Text(
+                  '●  Sesi aktif',
+                  style: TextStyle(fontSize: 10, color: _muted),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      body: Column(
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            color: Colors.white,
+            child: Row(
+              children: [
+                const Icon(Icons.eco_outlined, color: _green),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.reportCaption,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 11,
+                        ),
+                      ),
+                      Text(
+                        widget.reportStatus,
+                        style: TextStyle(fontSize: 10, color: _green),
+                      ),
+                    ],
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {},
+                  child: const Text(
+                    'Ubah gejala',
+                    style: TextStyle(fontSize: 10),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: FutureBuilder<List<ChatMessage>>(
+              future: _messagesFuture,
+              builder: (context, snapshot) {
+                final messages = snapshot.data ?? const <ChatMessage>[];
+                return ListView(
+                  padding: const EdgeInsets.all(14),
+                  children: [
+                    if (snapshot.connectionState == ConnectionState.waiting)
+                      const Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Center(child: CircularProgressIndicator()),
+                      ),
+                    if (messages.isNotEmpty)
+                      const Center(
+                        child: Chip(
+                          label: Text('Riwayat percakapan', style: TextStyle(fontSize: 10)),
+                        ),
+                      ),
+                    ...messages.map((message) {
+                      final mine = message.senderRole == widget.role.name;
+                      return Align(
+                        alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.all(12),
+                          constraints: const BoxConstraints(maxWidth: 280),
+                          decoration: BoxDecoration(
+                            color: mine ? const Color(0xFF25833E) : Colors.white,
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                            children: [
+                              if (!mine)
+                                Text(message.senderName, style: const TextStyle(color: _green, fontSize: 9, fontWeight: FontWeight.w700)),
+                              Text(
+                                message.text,
+                                style: TextStyle(color: mine ? Colors.white : _ink, height: 1.4, fontSize: 12),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                '${message.sentAt.hour.toString().padLeft(2, '0')}.${message.sentAt.minute.toString().padLeft(2, '0')}',
+                                style: TextStyle(color: mine ? Colors.white70 : _muted, fontSize: 9),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                    if (snapshot.connectionState == ConnectionState.done && messages.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.all(22),
+                        child: Text('Belum ada pesan. Mulai percakapan dengan mengirim pesan.', textAlign: TextAlign.center, style: TextStyle(color: _muted, fontSize: 12)),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ),
+          SafeArea(
+            top: false,
+            child: Container(
+              color: Colors.white,
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+              child: Row(
+                children: [
+                  IconButton(
+                    onPressed: () {},
+                    icon: const Icon(
+                      Icons.add_photo_alternate_outlined,
+                      color: _green,
+                    ),
+                  ),
+                  Expanded(
+                    child: TextField(
+                      controller: _controller,
+                      onSubmitted: (_) => _send(),
+                      decoration: InputDecoration(
+                        hintText: 'Tulis pesan...',
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 11,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFE3EAE5),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: _send,
+                    icon: const Icon(Icons.send_rounded, color: _green),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DetailCard extends StatelessWidget {
+  const _DetailCard({required this.title, required this.child});
+  final String title;
+  final Widget child;
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: const Color(0xFFE4EBE5)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(fontWeight: FontWeight.w800, color: _ink),
+        ),
+        const SizedBox(height: 9),
+        child,
+      ],
+    ),
+  );
+}
+
+class _SymptomChips extends StatelessWidget {
+  const _SymptomChips({required this.description});
+
+  final String description;
+
+  @override
+  Widget build(BuildContext context) {
+    final symptoms = description
+        .split(RegExp(r'[,;\n.]'))
+        .map((value) => value.trim())
+        .where((value) => value.length > 2)
+        .take(4)
+        .toList();
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: symptoms
+          .map((symptom) => Chip(
+                label: Text(symptom, style: const TextStyle(fontSize: 10)),
+                visualDensity: VisualDensity.compact,
+                backgroundColor: const Color(0xFFF0F5F1),
+                side: BorderSide.none,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ))
+          .toList(),
+    );
+  }
+}
+
+class _InsightBanner extends StatelessWidget {
+  const _InsightBanner({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFFE2F0FF),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.auto_awesome_rounded, color: Color(0xFF3976A8), size: 15),
+            const SizedBox(width: 6),
+            Expanded(child: Text(text, style: const TextStyle(color: Color(0xFF315E82), fontSize: 10, fontWeight: FontWeight.w600))),
+          ],
+        ),
+      );
+}
+
+class _OrderDetailScreen extends StatelessWidget {
+  const _OrderDetailScreen({required this.order});
+  final MarketOrder order;
+
+  @override
+  Widget build(BuildContext context) {
+    final steps = ['Dipesan', 'Diproses', 'Dikirim', 'Selesai'];
+    final active = steps.indexOf(order.status).clamp(0, steps.length - 1);
+    return Scaffold(
+      backgroundColor: _surface,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        foregroundColor: _ink,
+        elevation: 0,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Pesanan ${order.id}',
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+            ),
+            Text(
+              'Toko Tani Makmur · ${_formatDate(order.date)}',
+              style: const TextStyle(fontSize: 11, color: _muted),
+            ),
+          ],
+        ),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+        children: [
+          const Text(
+            'Status',
+            style: TextStyle(color: _ink, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFE4EBE5)),
+            ),
+            child: Column(
+              children: [
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: _StatusBadge(status: order.status),
+                ),
+                const SizedBox(height: 8),
+                ...List.generate(steps.length, (index) {
+                  final reached = index <= active;
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 28,
+                        child: Column(
+                          children: [
+                            Container(
+                              width: 22,
+                              height: 22,
+                              decoration: BoxDecoration(
+                                color: reached
+                                    ? const Color(0xFF2A9148)
+                                    : const Color(0xFFE4EBE5),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                index < active
+                                    ? Icons.check_rounded
+                                    : Icons.circle,
+                                size: 12,
+                                color: Colors.white,
+                              ),
+                            ),
+                            if (index < steps.length - 1)
+                              Container(
+                                width: 2,
+                                height: 28,
+                                color: index < active
+                                    ? const Color(0xFF2A9148)
+                                    : const Color(0xFFE4EBE5),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          steps[index],
+                          style: TextStyle(
+                            color: reached ? _ink : _muted,
+                            fontSize: 12,
+                            fontWeight: index == active
+                                ? FontWeight.w800
+                                : FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                }),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          _DetailCard(
+            title: 'Rincian pesanan',
+            child: Column(
+              children: [
+                ...order.items.map(
+                  (item) => Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${item.productName} × ${item.quantity}',
+                            style: const TextStyle(color: _muted, fontSize: 12),
+                          ),
+                        ),
+                        Text(
+                          _formatPrice(item.total),
+                          style: const TextStyle(
+                            color: _ink,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const Divider(),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Total',
+                      style: TextStyle(
+                        color: _ink,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      _formatPrice(order.total),
+                      style: const TextStyle(
+                        color: Color(0xFF18834A),
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AdviserReportScreen extends StatefulWidget {
+  const _AdviserReportScreen({
+    required this.report,
+    required this.products,
+    required this.onSave,
+    required this.onOpenChat,
+  });
+
+  final CropReport report;
+  final List<MarketProduct> products;
+  final Future<bool> Function(CropReport report) onSave;
+  final VoidCallback onOpenChat;
+
+  @override
+  State<_AdviserReportScreen> createState() => _AdviserReportScreenState();
+}
+
+class _AdviserReportScreenState extends State<_AdviserReportScreen> {
+  static const _diseases = [
+    ('Hawar Daun Bakteri', 'Xanthomonas oryzae pv. oryzae'),
+    ('Hawar Daun Pyricularia', 'Pyricularia oryzae'),
+    ('Blas', 'Pyricularia oryzae'),
+    ('Antraknosa', 'Colletotrichum capsici'),
+    ('Layu Fusarium', 'Fusarium oxysporum'),
+  ];
+
+  late String? _diagnosis = widget.report.diagnosis;
+  late final TextEditingController _recommendationController =
+      TextEditingController(text: widget.report.recommendation ?? '');
+  final Set<int> _selectedProductIds = {};
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _recommendationController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final diagnosis = _diagnosis;
+    if (diagnosis == null || _recommendationController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Pilih diagnosis dan isi rekomendasi.')),
+      );
+      return;
+    }
+    setState(() => _saving = true);
+    final selectedProducts = widget.products
+        .where((product) => product.id != null && _selectedProductIds.contains(product.id))
+        .map((product) => product.name)
+        .toList();
+    final recommendation = _recommendationController.text.trim();
+    final completeRecommendation = selectedProducts.isEmpty
+        ? recommendation
+        : '$recommendation\n\nObat yang disarankan: ${selectedProducts.join(', ')}';
+    final saved = await widget.onSave(
+      widget.report.copyWith(
+        status: 'Selesai Ditinjau',
+        diagnosis: diagnosis,
+        recommendation: completeRecommendation,
+      ),
+    );
+    if (!mounted) return;
+    setState(() => _saving = false);
+    if (saved) Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: _surface,
+    appBar: AppBar(
+      backgroundColor: Colors.white,
+      foregroundColor: _ink,
+      elevation: 0,
+      title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Tinjau & Diagnosis', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+        Text('${widget.report.crop} · ${_formatDate(widget.report.date)}', style: const TextStyle(fontSize: 11, color: _muted)),
+      ]),
+    ),
+    body: ListView(padding: const EdgeInsets.fromLTRB(16, 12, 16, 24), children: [
+      if (widget.report.photoBytes != null)
+        ClipRRect(borderRadius: BorderRadius.circular(15), child: Image.memory(widget.report.photoBytes!, height: 180, fit: BoxFit.cover))
+      else
+        Container(height: 150, decoration: BoxDecoration(borderRadius: BorderRadius.circular(15), gradient: const LinearGradient(colors: [Color(0xFFD7F0D3), Color(0xFFB8DF9B)])), child: const Icon(Icons.eco_outlined, size: 38, color: _green)),
+      const SizedBox(height: 12),
+      Row(children: [Expanded(child: Text('Laporan ${widget.report.id} · ${widget.report.location}', style: const TextStyle(fontSize: 12, color: _ink, fontWeight: FontWeight.w700))), _StatusBadge(status: widget.report.status)]),
+      const SizedBox(height: 12),
+      _DetailCard(title: 'Gejala dilaporkan', child: Text(widget.report.description, style: const TextStyle(color: _ink, height: 1.45))),
+      const SizedBox(height: 8),
+      _SymptomChips(description: widget.report.description),
+      const SizedBox(height: 10),
+      _InsightBanner(text: 'Saran awal sistem: ${_suggestedDiagnosis(widget.report.crop)}. Pastikan diagnosis akhir sesuai pemeriksaan Anda.'),
+      const SizedBox(height: 14),
+      const Text('Jenis hama/penyakit', style: TextStyle(color: _ink, fontWeight: FontWeight.w800)),
+      const SizedBox(height: 8),
+      ..._diseases.map((disease) {
+        final selected = _diagnosis == disease.$1;
+        return InkWell(
+          onTap: () => setState(() => _diagnosis = disease.$1),
+          borderRadius: BorderRadius.circular(13),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(13), border: Border.all(color: selected ? _green : const Color(0xFFE2E9E3), width: selected ? 1.5 : 1)),
+            child: Row(children: [Icon(selected ? Icons.radio_button_checked : Icons.radio_button_unchecked, color: selected ? _green : _muted, size: 20), const SizedBox(width: 9), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(disease.$1, style: const TextStyle(color: _ink, fontWeight: FontWeight.w700, fontSize: 12)), Text(disease.$2, style: const TextStyle(color: _muted, fontSize: 10))]))]),
+          ),
+        );
+      }),
+      const SizedBox(height: 6),
+      const Text('Rekomendasi penanganan', style: TextStyle(color: _ink, fontWeight: FontWeight.w800)),
+      const SizedBox(height: 8),
+      TextField(controller: _recommendationController, maxLines: 4, decoration: _inputDecoration('Tulis rekomendasi yang akan diterima petani')),
+      const SizedBox(height: 14),
+      const Text('Rekomendasi obat', style: TextStyle(color: _ink, fontWeight: FontWeight.w800)),
+      const SizedBox(height: 6),
+      ...widget.products.where((product) => product.stock > 0).take(5).map((product) => CheckboxListTile(
+        value: product.id != null && _selectedProductIds.contains(product.id),
+        onChanged: product.id == null ? null : (selected) => setState(() {
+          if (selected == true) {
+            _selectedProductIds.add(product.id!);
+          } else {
+            _selectedProductIds.remove(product.id);
+          }
+        }),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+        dense: true,
+        activeColor: _green,
+        title: Text(product.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+        subtitle: Text('${product.category} · ${product.stock} tersedia', style: const TextStyle(fontSize: 10)),
+        secondary: Icon(_productIcon(product.category), color: _green),
+      )),
+      const SizedBox(height: 16),
+      OutlinedButton.icon(
+        onPressed: widget.onOpenChat,
+        icon: const Icon(Icons.chat_bubble_outline_rounded),
+        label: const Text('Chat dengan Pelapor'),
+      ),
+      const SizedBox(height: 8),
+      SizedBox(height: 48, child: FilledButton.icon(onPressed: _saving ? null : _save, icon: _saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.check_rounded), label: Text(_saving ? 'Menyimpan...' : 'Simpan Diagnosis'))),
+    ]),
+  );
+}
+
+class _ActiveChatBadge extends StatelessWidget {
+  const _ActiveChatBadge();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    decoration: BoxDecoration(
+      color: const Color(0xFFDDF2E3),
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: const Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.circle, size: 7, color: Color(0xFF25833E)),
+        SizedBox(width: 4),
+        Text(
+          'Aktif',
+          style: TextStyle(
+            color: Color(0xFF25833E),
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
 class _HistoryTab extends StatefulWidget {
   const _HistoryTab({
     required this.reports,
     required this.onOpenReport,
     required this.onEdit,
     required this.onDelete,
-    this.title = 'Riwayat Laporan',
+    this.title = 'Riwayat laporan',
     this.subtitle = 'Pantau perkembangan laporan tanaman Anda.',
     this.onCreateReport,
   });
@@ -864,25 +2122,39 @@ class _HistoryTabState extends State<_HistoryTab> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 22, 18, 28),
       children: [
-        _PageHeading(
-          eyebrow: widget.title == 'Laporan Masuk'
-              ? 'Antrean pemeriksaan'
-              : 'Aktivitas Anda',
-          title: widget.title,
-          subtitle: widget.subtitle,
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                widget.title,
+                style: const TextStyle(
+                  color: _ink,
+                  fontSize: 19,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            if (widget.onCreateReport != null)
+              IconButton.filled(
+                onPressed: widget.onCreateReport,
+                style: IconButton.styleFrom(
+                  backgroundColor: _green,
+                  foregroundColor: Colors.white,
+                ),
+                icon: const Icon(Icons.add_rounded),
+                tooltip: 'Buat laporan',
+              ),
+          ],
         ),
-        if (widget.onCreateReport != null) ...[
-          const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerRight,
-            child: FilledButton.icon(
-              onPressed: widget.onCreateReport,
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Buat laporan'),
+        if (widget.subtitle.isNotEmpty && widget.title == 'Laporan Masuk')
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              widget.subtitle,
+              style: const TextStyle(color: _muted, fontSize: 12),
             ),
           ),
-        ],
-        const SizedBox(height: 18),
+        const SizedBox(height: 14),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(
@@ -899,16 +2171,18 @@ class _HistoryTabState extends State<_HistoryTab> {
                       vertical: 9,
                     ),
                     decoration: BoxDecoration(
-                      color: selected ? _forest : Colors.white,
+                      color: selected ? _green : Colors.white,
                       borderRadius: BorderRadius.circular(999),
                       border: Border.all(
-                        color: selected ? _forest : const Color(0xFFE1E8E2),
+                        color: selected
+                            ? const Color(0xFFDCEDE4)
+                            : const Color(0xFFE5E8E4),
                       ),
                     ),
                     child: Text(
                       filter.label,
                       style: TextStyle(
-                        color: selected ? Colors.white : _ink,
+                        color: selected ? Colors.white : _muted,
                         fontWeight: selected
                             ? FontWeight.w700
                             : FontWeight.w500,
@@ -935,7 +2209,7 @@ class _HistoryTabState extends State<_HistoryTab> {
                 report: report,
                 onTap: () => widget.onOpenReport(report),
                 onEdit: () => widget.onEdit(report),
-                onDelete: () => widget.onDelete(report),
+                onDelete: null,
               ),
             ),
           ),
@@ -947,8 +2221,13 @@ class _HistoryTabState extends State<_HistoryTab> {
 }
 
 class _ReportTab extends StatefulWidget {
-  const _ReportTab({required this.onSubmit, required this.onCancel});
+  const _ReportTab({
+    required this.imagePicker,
+    required this.onSubmit,
+    required this.onCancel,
+  });
 
+  final ReportImagePicker imagePicker;
   final Future<bool> Function(CropReport report) onSubmit;
   final VoidCallback onCancel;
 
@@ -960,8 +2239,22 @@ class _ReportTabState extends State<_ReportTab> {
   final _formKey = GlobalKey<FormState>();
   final _locationController = TextEditingController();
   final _descriptionController = TextEditingController();
-  String? _crop;
-  bool _samplePhotoSelected = false;
+  final Set<String> _selectedSymptoms = {};
+  ReportImage? _selectedImage;
+
+  static const _symptoms = [
+    'Daun menguning dari tepi',
+    'Bercak memanjang kering',
+    'Bercak belah ketupat',
+    'Leher malai patah',
+    'Daun menggulung',
+    'Batang membusuk',
+    'Daun keriting',
+    'Bercak cekung pada buah',
+    'Buah membusuk',
+    'Daun layu',
+    'Batang menghitam',
+  ];
 
   @override
   void dispose() {
@@ -975,141 +2268,470 @@ class _ReportTabState extends State<_ReportTab> {
     return Form(
       key: _formKey,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(18, 22, 18, 28),
+        padding: EdgeInsets.zero,
         children: [
-          const _PageHeading(
-            eyebrow: 'Asisten tanaman',
-            title: 'Buat laporan',
-            subtitle: 'Foto dan ceritakan gejala untuk ditinjau penyuluh.',
-          ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(
-              onPressed: widget.onCancel,
-              child: const Text('Batal'),
+          Container(
+            padding: const EdgeInsets.fromLTRB(8, 6, 18, 12),
+            color: Colors.white,
+            child: Row(
+              children: [
+                IconButton(
+                  onPressed: widget.onCancel,
+                  tooltip: 'Kembali',
+                  icon: const Icon(Icons.arrow_back_rounded),
+                ),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Buat Laporan',
+                        style: TextStyle(
+                          color: _ink,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      Text(
+                        'Langkah singkat, hasil cepat',
+                        style: TextStyle(color: _muted, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 20),
-          const _FormLabel('Tanaman'),
-          const SizedBox(height: 8),
-          DropdownButtonFormField<String>(
-            initialValue: _crop,
-            decoration: _inputDecoration('Pilih jenis tanaman'),
-            items: const [
-              DropdownMenuItem(value: 'Padi sawah', child: Text('Padi sawah')),
-              DropdownMenuItem(value: 'Cabai', child: Text('Cabai')),
-              DropdownMenuItem(value: 'Tomat', child: Text('Tomat')),
-            ],
-            validator: (value) => value == null ? 'Pilih jenis tanaman.' : null,
-            onChanged: (value) => setState(() => _crop = value),
-          ),
-          const SizedBox(height: 16),
-          const _FormLabel('Lokasi atau nama petak'),
-          const SizedBox(height: 8),
-          TextFormField(
-            controller: _locationController,
-            decoration: _inputDecoration('Contoh: Petak Utara'),
-            validator: (value) => value == null || value.trim().isEmpty
-                ? 'Masukkan lokasi tanaman.'
-                : null,
-          ),
-          const SizedBox(height: 16),
-          const _FormLabel('Ceritakan gejala'),
-          const SizedBox(height: 8),
-          TextFormField(
-            controller: _descriptionController,
-            minLines: 4,
-            maxLines: 6,
-            decoration: _inputDecoration(
-              'Jelaskan perubahan yang terlihat pada tanaman',
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const _FormLabel('Foto tanaman'),
+                    const SizedBox(width: 4),
+                    Text(
+                      '*wajib',
+                      style: TextStyle(
+                        color: Colors.red.shade700,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                InkWell(
+                  onTap: _pickImage,
+                  borderRadius: BorderRadius.circular(14),
+                  child: Container(
+                    width: double.infinity,
+                    height: 108,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0F8F1),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: _selectedImage != null
+                            ? const Color(0xFF25833E)
+                            : const Color(0xFF80C58B),
+                        width: 1.2,
+                      ),
+                    ),
+                    child: _selectedImage == null
+                        ? const Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.add_a_photo_outlined,
+                                color: Color(0xFF25833E),
+                                size: 23,
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'Ambil atau pilih foto',
+                                style: TextStyle(
+                                  color: _green,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              SizedBox(height: 3),
+                              Text(
+                                'PNG/JPG/JPEG, maks. 5 MB',
+                                style: TextStyle(color: _muted, fontSize: 10),
+                              ),
+                            ],
+                          )
+                        : ClipRRect(
+                            borderRadius: BorderRadius.circular(13),
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                Image.memory(
+                                  _selectedImage!.bytes,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      const ColoredBox(
+                                        color: Color(0xFFE8F1EA),
+                                        child: Icon(
+                                          Icons.broken_image_outlined,
+                                          color: _green,
+                                        ),
+                                      ),
+                                ),
+                                Align(
+                                  alignment: Alignment.bottomCenter,
+                                  child: Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 6,
+                                    ),
+                                    color: Colors.black54,
+                                    child: Text(
+                                      _selectedImage!.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 12,
+                  children: [
+                    TextButton(
+                      onPressed: _pickImage,
+                      style: TextButton.styleFrom(
+                        foregroundColor: const Color(0xFF25833E),
+                        padding: EdgeInsets.zero,
+                      ),
+                      child: const Text(
+                        'Pilih foto dari perangkat',
+                        style: TextStyle(
+                          decoration: TextDecoration.underline,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                    if (_selectedImage != null)
+                      TextButton(
+                        onPressed: () => setState(() => _selectedImage = null),
+                        style: TextButton.styleFrom(
+                          foregroundColor: const Color(0xFF9B4038),
+                          padding: EdgeInsets.zero,
+                        ),
+                        child: const Text(
+                          'Hapus foto',
+                          style: TextStyle(
+                            decoration: TextDecoration.underline,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                const _FormLabel('Gejala yang terlihat (opsional)'),
+                const SizedBox(height: 8),
+                TextFormField(
+                  key: const ValueKey('report-symptom-picker'),
+                  readOnly: true,
+                  onTap: _showSymptomPicker,
+                  decoration:
+                      _inputDecoration(
+                        _selectedSymptoms.isEmpty
+                            ? 'Pilih gejala yang terlihat'
+                            : '${_selectedSymptoms.length} gejala dipilih',
+                      ).copyWith(
+                        prefixIcon: const Icon(
+                          Icons.search_rounded,
+                          color: _muted,
+                        ),
+                        suffixIcon: const Icon(
+                          Icons.arrow_drop_down_rounded,
+                          color: _muted,
+                        ),
+                      ),
+                ),
+                if (_selectedSymptoms.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: _selectedSymptoms
+                        .map(
+                          (symptom) => InputChip(
+                            label: Text(symptom),
+                            onDeleted: () => setState(
+                              () => _selectedSymptoms.remove(symptom),
+                            ),
+                            selectedColor: const Color(0xFFE5F4E8),
+                            side: const BorderSide(color: Color(0xFFDDE7DF)),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ],
+                const SizedBox(height: 14),
+                const _FormLabel('Catatan tambahan (opsional)'),
+                const SizedBox(height: 6),
+                TextFormField(
+                  key: const ValueKey('report-notes'),
+                  controller: _descriptionController,
+                  minLines: 2,
+                  maxLines: 4,
+                  decoration: _inputDecoration(
+                    'Jelaskan kondisi tanaman lainnya',
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const _FormLabel('Lokasi lahan (opsional)'),
+                const SizedBox(height: 6),
+                TextFormField(
+                  key: const ValueKey('report-location'),
+                  controller: _locationController,
+                  decoration: _inputDecoration('Contoh: Petak Utara'),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _submit,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF25833E),
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size.fromHeight(48),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(13),
+                      ),
+                    ),
+                    icon: const Icon(Icons.send_rounded, size: 17),
+                    label: const Text('Kirim laporan'),
+                  ),
+                ),
+              ],
             ),
-            validator: (value) => value == null || value.trim().isEmpty
-                ? 'Jelaskan gejala yang terlihat.'
-                : null,
-          ),
-          const SizedBox(height: 16),
-          const _FormLabel('Foto tanaman'),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            onPressed: () {
-              setState(() => _samplePhotoSelected = !_samplePhotoSelected);
-            },
-            style: OutlinedButton.styleFrom(
-              foregroundColor: _green,
-              minimumSize: const Size.fromHeight(54),
-              side: const BorderSide(color: Color(0xFFD9E2DC)),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-            ),
-            icon: const Icon(Icons.add_a_photo_outlined),
-            label: Text(
-              _samplePhotoSelected
-                  ? 'Foto contoh terpilih'
-                  : 'Gunakan foto contoh',
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Unggah JPG/PNG maks. 5 MB memerlukan layanan penyimpanan.',
-            style: TextStyle(color: _muted, fontSize: 12),
-          ),
-          const SizedBox(height: 24),
-          FilledButton.icon(
-            onPressed: _submit,
-            style: FilledButton.styleFrom(
-              backgroundColor: _forest,
-              foregroundColor: Colors.white,
-              minimumSize: const Size.fromHeight(52),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-            ),
-            icon: const Icon(Icons.send_rounded),
-            label: const Text('Kirim laporan'),
           ),
         ],
       ),
     );
   }
 
+  Future<void> _showSymptomPicker() async {
+    final selectedSymptoms = await showModalBottomSheet<Set<String>>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => _SymptomPickerSheet(
+        symptoms: _symptoms,
+        selectedSymptoms: _selectedSymptoms,
+      ),
+    );
+    if (selectedSymptoms == null || !mounted) return;
+    setState(() {
+      _selectedSymptoms
+        ..clear()
+        ..addAll(selectedSymptoms);
+    });
+  }
+
+  Future<void> _pickImage() async {
+    try {
+      final image = await widget.imagePicker();
+      if (image == null || !mounted) return;
+      final validationError = validateReportImage(image);
+      if (validationError != null) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(validationError)));
+        return;
+      }
+      setState(() => _selectedImage = image);
+    } on ReportImagePickerException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
+    } on PlatformException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal membuka pemilih gambar: ${error.message}'),
+        ),
+      );
+    }
+  }
+
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (_selectedImage == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Foto tanaman wajib dipilih.')),
+      );
+      return;
+    }
 
     final now = DateTime.now();
-    final id =
-        'SIH-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}-${now.millisecondsSinceEpoch % 1000}';
+    final id = 'L-${now.millisecondsSinceEpoch % 10000 + 1000}';
+    final notes = _descriptionController.text.trim();
+    final symptomText = _selectedSymptoms.join(', ');
+    final description = [
+      if (symptomText.isNotEmpty) symptomText,
+      if (notes.isNotEmpty) 'Catatan: $notes',
+    ].join('\n');
     final saved = await widget.onSubmit(
       CropReport(
         id: id,
-        crop: _crop!,
-        location: _locationController.text.trim(),
-        description: _descriptionController.text.trim(),
+        crop: _unspecifiedCrop,
+        location: _locationController.text.trim().isEmpty
+            ? 'Belum ditentukan'
+            : _locationController.text.trim(),
+        description: description.isEmpty
+            ? 'Gejala belum dipilih.'
+            : description,
         date: now,
         status: 'Diajukan',
+        photoBytes: _selectedImage!.bytes,
       ),
     );
     if (!saved || !mounted) return;
     _formKey.currentState!.reset();
     _locationController.clear();
     _descriptionController.clear();
-    setState(() => _crop = null);
+    setState(() {
+      _selectedSymptoms.clear();
+      _selectedImage = null;
+    });
+  }
+}
+
+class _SymptomPickerSheet extends StatefulWidget {
+  const _SymptomPickerSheet({
+    required this.symptoms,
+    required this.selectedSymptoms,
+  });
+
+  final List<String> symptoms;
+  final Set<String> selectedSymptoms;
+
+  @override
+  State<_SymptomPickerSheet> createState() => _SymptomPickerSheetState();
+}
+
+class _SymptomPickerSheetState extends State<_SymptomPickerSheet> {
+  late final Set<String> _selectedSymptoms = Set.of(widget.selectedSymptoms);
+  String _query = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final visibleSymptoms = widget.symptoms
+        .where((symptom) => symptom.toLowerCase().contains(_query))
+        .toList();
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: FractionallySizedBox(
+        heightFactor: 0.75,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Pilih gejala tanaman',
+                style: TextStyle(
+                  color: _ink,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const ValueKey('symptom-search'),
+                onChanged: (value) =>
+                    setState(() => _query = value.trim().toLowerCase()),
+                decoration: _inputDecoration('Cari gejala').copyWith(
+                  prefixIcon: const Icon(Icons.search_rounded, color: _muted),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: visibleSymptoms.isEmpty
+                    ? const Center(
+                        child: Text(
+                          'Gejala tidak ditemukan.',
+                          style: TextStyle(color: _muted),
+                        ),
+                      )
+                    : ListView(
+                        children: visibleSymptoms
+                            .map(
+                              (symptom) => CheckboxListTile(
+                                value: _selectedSymptoms.contains(symptom),
+                                title: Text(symptom),
+                                controlAffinity:
+                                    ListTileControlAffinity.leading,
+                                contentPadding: EdgeInsets.zero,
+                                activeColor: _green,
+                                onChanged: (selected) {
+                                  setState(() {
+                                    if (selected == true) {
+                                      _selectedSymptoms.add(symptom);
+                                    } else {
+                                      _selectedSymptoms.remove(symptom);
+                                    }
+                                  });
+                                },
+                              ),
+                            )
+                            .toList(),
+                      ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () =>
+                      Navigator.pop(context, Set<String>.of(_selectedSymptoms)),
+                  child: Text('Terapkan gejala (${_selectedSymptoms.length})'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
 class _MarketTab extends StatefulWidget {
   const _MarketTab({
     required this.products,
+    required this.canOrder,
     required this.canManage,
+    required this.imagePicker,
     required this.onCheckout,
+    required this.onChangeStock,
     required this.onCreate,
     required this.onEdit,
     required this.onDelete,
   });
 
   final List<MarketProduct> products;
+  final bool canOrder;
   final bool canManage;
-  final VoidCallback onCheckout;
+  final ReportImagePicker imagePicker;
+  final Future<bool> Function(List<MarketOrderItem> items, ReportImage proof)
+  onCheckout;
+  final Future<bool> Function(MarketProduct product, int stock) onChangeStock;
   final VoidCallback onCreate;
   final ValueChanged<MarketProduct> onEdit;
   final ValueChanged<MarketProduct> onDelete;
@@ -1122,6 +2744,7 @@ class _MarketTabState extends State<_MarketTab> {
   String _searchQuery = '';
   String _selectedCategory = 'Semua';
   final Map<int, int> _cart = {};
+  ReportImage? _paymentProof;
 
   static const _categories = [
     'Semua',
@@ -1141,197 +2764,390 @@ class _MarketTabState extends State<_MarketTab> {
           _selectedCategory == 'Semua' || product.category == _selectedCategory;
       return matchesQuery && matchesCategory;
     }).toList();
-    final recommendedProducts = visibleProducts
-        .where((product) => product.category == 'Bakterisida')
-        .toList();
-    final otherProducts = visibleProducts
-        .where((product) => product.category != 'Bakterisida')
-        .toList();
+    final cartItems = _cartItems();
+    final cartTotal = cartItems.fold(0, (total, item) => total + item.total);
 
-    Widget productCard(MarketProduct product) => Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: _ProductCard(
-        product: product,
-        canManage: widget.canManage,
-        quantity: _cart[product.id] ?? 0,
-        onOrder: () => setState(() {
-          if (product.id != null && (_cart[product.id] ?? 0) < product.stock) {
-            _cart.update(product.id!, (value) => value + 1, ifAbsent: () => 1);
-          }
-        }),
-        onRemove: () => setState(() {
-          final id = product.id;
-          if (id != null && (_cart[id] ?? 0) > 0) {
-            _cart.update(id, (value) => value - 1);
-          }
-        }),
-        onEdit: () => widget.onEdit(product),
-        onDelete: () => widget.onDelete(product),
-      ),
-    );
-
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(18, 22, 18, 28),
+    return Column(
       children: [
-        _PageHeading(
-          eyebrow: widget.canManage
-              ? 'Kelola katalog toko'
-              : 'Kebutuhan pertanian',
-          title: widget.canManage ? 'Produk & Stok' : 'AgriMarket',
-          subtitle: widget.canManage
-              ? 'Atur produk, harga, dan stok Toko Tani Makmur.'
-              : 'Temukan produk pilihan untuk membantu merawat tanaman.',
-        ),
-        if (widget.canManage) ...[
-          const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerRight,
-            child: FilledButton.icon(
-              onPressed: widget.onCreate,
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Tambah produk'),
-            ),
-          ),
-        ],
-        if (widget.canManage) ...[
-          const SizedBox(height: 8),
-          TextField(
-            onChanged: (value) =>
-                setState(() => _searchQuery = value.trim().toLowerCase()),
-            decoration: _inputDecoration('Cari produk').copyWith(
-              prefixIcon: const Icon(Icons.search_rounded, color: _muted),
-            ),
-          ),
-          const SizedBox(height: 14),
-          SizedBox(
-            height: 38,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: _categories.map((category) {
-                return _CategoryChip(
-                  label: category,
-                  selected: category == _selectedCategory,
-                  onTap: () => setState(() => _selectedCategory = category),
-                );
-              }).toList(),
-            ),
-          ),
-        ],
-        const SizedBox(height: 12),
-        if (!widget.canManage)
-          const Text('Direkomendasikan', style: TextStyle(color: _ink, fontSize: 16, fontWeight: FontWeight.w700)),
-        if (!widget.canManage) const SizedBox(height: 8),
-        if (!widget.canManage)
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFFEFFAF0),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.verified_outlined, color: _green),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Direkomendasikan penyuluh. Obat ini direkomendasikan untuk diagnosis Anda. Obat lain tetap tersedia di AgriMarket.',
-                    style: TextStyle(color: _green, height: 1.35, fontSize: 12),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(18, 22, 18, 28),
+            children: [
+              _PageHeading(
+                eyebrow: widget.canManage
+                    ? 'Kelola katalog toko'
+                    : 'Kebutuhan pertanian',
+                title: widget.canManage ? 'Produk & Stok' : 'AgriMarket',
+                subtitle: widget.canManage
+                    ? 'Atur produk, harga, dan stok Toko Tani Makmur.'
+                    : 'Temukan produk pilihan untuk membantu merawat tanaman.',
+              ),
+              if (widget.canManage) ...[
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: IconButton.filled(
+                    onPressed: widget.onCreate,
+                    tooltip: 'Tambah produk',
+                    icon: const Icon(Icons.add_rounded),
                   ),
                 ),
               ],
+              const SizedBox(height: 8),
+              TextField(
+                onChanged: (value) =>
+                    setState(() => _searchQuery = value.trim().toLowerCase()),
+                decoration: _inputDecoration('Cari produk').copyWith(
+                  prefixIcon: const Icon(Icons.search_rounded, color: _muted),
+                ),
+              ),
+              const SizedBox(height: 14),
+              SizedBox(
+                height: 38,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: _categories.map((category) {
+                    return _CategoryChip(
+                      label: category,
+                      selected: category == _selectedCategory,
+                      onTap: () => setState(() => _selectedCategory = category),
+                    );
+                  }).toList(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (!widget.canOrder)
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEAF3ED),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.info_outline_rounded, color: _green),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Pemesanan akan tersedia setelah laporan tanaman selesai ditinjau.',
+                          style: TextStyle(color: _ink, height: 1.4),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 14),
+              if (visibleProducts.isEmpty)
+                const _EmptyState(
+                  icon: Icons.search_off_rounded,
+                  title: 'Produk tidak ditemukan',
+                  message: 'Coba kata kunci atau kategori yang berbeda.',
+                )
+              else
+                ...visibleProducts.map(
+                  (product) => Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _ProductCard(
+                      product: product,
+                      canOrder: widget.canOrder,
+                      canManage: widget.canManage,
+                      onOrder: () => _addToCart(product),
+                      onChangeStock: (stock) => widget.onChangeStock(product, stock),
+                      onEdit: () => widget.onEdit(product),
+                      onDelete: () => widget.onDelete(product),
+                    ),
+                  ),
+                ),
+              const _PrototypeNote(),
+            ],
+          ),
+        ),
+        if (!widget.canManage)
+          Container(
+            padding: const EdgeInsets.fromLTRB(18, 8, 18, 8),
+            color: _surface,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+              _buildPaymentProofPanel(cartTotal),
+              SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: widget.canOrder && cartItems.isNotEmpty
+                    ? _checkout
+                    : null,
+                icon: const Icon(Icons.shopping_cart_checkout_rounded),
+                label: Text(
+                  cartItems.isEmpty
+                      ? 'Keranjang kosong'
+                      : 'Lanjutkan pesanan (${cartItems.length}) · ${_formatPrice(cartTotal)}',
+                ),
+              ),
+              ),
+              ],
             ),
           ),
-        const SizedBox(height: 12),
-        if (visibleProducts.isEmpty)
-          const _EmptyState(
-            icon: Icons.search_off_rounded,
-            title: 'Produk tidak ditemukan',
-            message: 'Coba kata kunci atau kategori yang berbeda.',
-          )
-        else if (widget.canManage)
-          ...visibleProducts.map(productCard)
-        else ...[
-          ...recommendedProducts.map(productCard),
-          if (otherProducts.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            const Text('Obat Lainnya', style: TextStyle(color: _ink, fontSize: 16, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 8),
-            ...otherProducts.map(productCard),
-          ],
-        ],
-        if (_cart.values.any((quantity) => quantity > 0)) ...[
-          const SizedBox(height: 4),
-          FilledButton.icon(
-            onPressed: _checkout,
-            icon: const Icon(Icons.shopping_bag_outlined),
-            label: Text('Lanjutkan · ${_cart.values.fold<int>(0, (total, quantity) => total + quantity)} item'),
-            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
-          ),
-        ],
       ],
     );
   }
 
-  Future<void> _checkout() async {
-    final selected = widget.products.where((product) =>
-      product.id != null && (_cart[product.id] ?? 0) > 0,
-    ).toList();
-    final itemCount = selected.fold<int>(0, (count, product) => count + _cart[product.id]!);
-    final total = selected.fold<int>(0, (sum, product) => sum + product.price * _cart[product.id]!);
-    final details = selected.map((product) => '${product.name} × ${_cart[product.id]}').join(', ');
+  List<MarketOrderItem> _cartItems() {
+    return widget.products
+        .where((product) => product.id != null && _cart.containsKey(product.id))
+        .map(
+          (product) => MarketOrderItem(
+            productId: product.id!,
+            productName: product.name,
+            quantity: _cart[product.id]!,
+            unitPrice: product.price,
+          ),
+        )
+        .toList();
+  }
+
+  Widget _buildPaymentProofPanel(int total) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          const Text('Total harga', style: TextStyle(color: _muted, fontSize: 11)),
+          Text(_formatPrice(total), style: const TextStyle(color: Color(0xFF18834A), fontSize: 15, fontWeight: FontWeight.w800)),
+        ]),
+        const SizedBox(height: 7),
+        const Text('Bukti transfer', style: TextStyle(color: _ink, fontSize: 11, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 5),
+        InkWell(
+          onTap: _pickPaymentProof,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            height: 82,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF1FAF2),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF71C883), width: 1.2),
+            ),
+            child: _paymentProof == null
+                ? const Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Icon(Icons.add_photo_alternate_outlined, color: _green, size: 22),
+                    SizedBox(height: 3),
+                    Text('Unggah bukti transfer', style: TextStyle(color: _green, fontSize: 10, fontWeight: FontWeight.w700)),
+                    Text('JPG/PNG, maks. 5 MB', style: TextStyle(color: _muted, fontSize: 9)),
+                  ])
+                : ClipRRect(
+                    borderRadius: BorderRadius.circular(11),
+                    child: Stack(fit: StackFit.expand, children: [
+                      Image.memory(_paymentProof!.bytes, fit: BoxFit.cover),
+                      Align(alignment: Alignment.bottomCenter, child: Container(
+                        width: double.infinity,
+                        color: Colors.black54,
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        child: Text(_paymentProof!.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 9)),
+                      )),
+                    ]),
+                  ),
+          ),
+        ),
+        if (_paymentProof != null)
+          Align(alignment: Alignment.centerRight, child: TextButton(onPressed: _pickPaymentProof, child: const Text('Ganti bukti'))),
+      ],
+    ),
+  );
+
+  Future<void> _pickPaymentProof() async {
     try {
-      final database = SihamaDatabase();
-      await database.initialize();
-      await database.checkoutLocalOrder(LocalOrder(
-        customer: 'Budi Santoso',
-        products: details,
-        itemCount: itemCount,
-        total: total,
-        date: DateTime.now(),
-      ), {for (final product in selected) product.id!: _cart[product.id]!});
-      if (!mounted) return;
-      setState(_cart.clear);
-      widget.onCheckout();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Pesanan disimpan di perangkat ini.')),
-      );
+      final image = await widget.imagePicker();
+      if (image == null || !mounted) return;
+      final error = validateReportImage(image);
+      if (error != null) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+        return;
+      }
+      setState(() => _paymentProof = image);
+    } on ReportImagePickerException catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
     } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Pesanan belum dapat disimpan: $error')),
-      );
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Foto bukti transfer gagal dibuka: $error')));
     }
   }
 
+  void _addToCart(MarketProduct product) {
+    if (!widget.canOrder) {
+      _showOrderUnavailable();
+      return;
+    }
+    final id = product.id;
+    if (id == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Produk belum siap untuk dipesan.')),
+      );
+      return;
+    }
+    final quantity = _cart[id] ?? 0;
+    if (quantity >= product.stock) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Stok ${product.name} tidak mencukupi.')),
+      );
+      return;
+    }
+    setState(() => _cart[id] = quantity + 1);
+  }
+
+  Future<void> _checkout() async {
+    final items = _cartItems();
+    if (items.isEmpty) return;
+    final proof = _paymentProof;
+    if (proof == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unggah bukti transfer sebelum memesan.')),
+      );
+      return;
+    }
+    final total = items.fold(0, (sum, item) => sum + item.total);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Konfirmasi pesanan'),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ...items.map(
+                (item) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(item.productName),
+                  subtitle: Text(
+                    '${item.quantity} × ${_formatPrice(item.unitPrice)}',
+                  ),
+                  trailing: Text(_formatPrice(item.total)),
+                ),
+              ),
+              const Divider(),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Total',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  Text(
+                    _formatPrice(total),
+                    style: const TextStyle(
+                      color: _green,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Kembali'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Buat pesanan'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final created = await widget.onCheckout(items, proof);
+    if (created && mounted) {
+      setState(() {
+        _cart.clear();
+        _paymentProof = null;
+      });
+    }
+  }
+
+  void _showOrderUnavailable() {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.lock_outline_rounded, color: _green),
+        title: const Text('Pemesanan belum tersedia'),
+        content: const Text(
+          'Tunggu sampai laporan tanaman selesai ditinjau untuk memesan produk.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Mengerti'),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
-class _NotificationsTab extends StatelessWidget {
-  const _NotificationsTab({required this.role});
+class _NotificationsTab extends StatefulWidget {
+  const _NotificationsTab({
+    required this.role,
+    required this.reports,
+    required this.orders,
+    required this.customerName,
+    required this.onOpenReport,
+    required this.onOpenOrder,
+    required this.onOpenChat,
+  });
 
   final SihamaRole role;
+  final List<CropReport> reports;
+  final List<MarketOrder> orders;
+  final String customerName;
+  final ValueChanged<CropReport> onOpenReport;
+  final ValueChanged<MarketOrder> onOpenOrder;
+  final VoidCallback onOpenChat;
+
+  @override
+  State<_NotificationsTab> createState() => _NotificationsTabState();
+}
+
+class _NotificationsTabState extends State<_NotificationsTab> {
+  bool _allRead = false;
 
   @override
   Widget build(BuildContext context) {
-    final notices = switch (role) {
-      SihamaRole.pelapor => const [
+    final reporterOrders = widget.orders
+        .where((order) => order.customerName == widget.customerName)
+        .toList();
+    final trackedOrder = reporterOrders.isEmpty ? null : reporterOrders.first;
+    final pendingOrders = widget.orders
+        .where((order) => order.status == 'Dipesan')
+        .toList();
+    final notices = switch (widget.role) {
+      SihamaRole.pelapor => [
         (
-          Icons.check_circle_outline_rounded,
-          'Laporan selesai ditinjau',
-          'Penyuluh telah memberikan diagnosis untuk laporan tanaman Anda.',
-          'Hari ini',
+          Icons.description_outlined,
+          'Laporan L-1042 selesai ditinjau',
+          'Penyuluh memberikan diagnosis Hawar Daun Bakteri. Lihat rekomendasi obat.',
+          '2 jam lalu',
+          true,
         ),
         (
-          Icons.local_shipping_outlined,
-          'Pesanan sedang diproses',
-          'Pesanan P-2201 sedang disiapkan oleh Toko Tani Makmur.',
-          'Kemarin',
+          Icons.shopping_bag_outlined,
+          trackedOrder == null
+              ? 'Belum ada pesanan'
+              : 'Pesanan ${trackedOrder.id} ${trackedOrder.status.toLowerCase()}',
+          trackedOrder == null
+              ? 'Pesanan yang dibuat di AgriMarket akan muncul di sini.'
+              : 'Status pesanan Anda sekarang ${trackedOrder.status.toLowerCase()}.',
+          trackedOrder == null ? '—' : _formatDate(trackedOrder.date),
+          false,
         ),
         (
           Icons.chat_bubble_outline_rounded,
-          'Pesan dari penyuluh',
-          'Penyuluh mengirimkan catatan lanjutan untuk laporan Anda.',
-          '2 hari lalu',
+          'Pesan baru dari Ir. Siti Rahmawati',
+          'Bercak terlihat sudah tidak melebar. Lanjutkan jadwal semprot...',
+          '1 jam lalu',
+          true,
         ),
       ],
       SihamaRole.penyuluh => const [
@@ -1340,115 +3156,232 @@ class _NotificationsTab extends StatelessWidget {
           'Laporan baru masuk',
           'Ada laporan gejala tanaman baru yang menunggu pemeriksaan.',
           'Hari ini',
+          true,
         ),
         (
           Icons.chat_bubble_outline_rounded,
           'Pesan dari petani',
           'Petani mengirimkan informasi tambahan pada laporan.',
           'Kemarin',
+          false,
         ),
       ],
-      SihamaRole.mitraToko => const [
+      SihamaRole.mitraToko => [
         (
           Icons.shopping_bag_outlined,
-          'Pesanan baru',
-          'Pesanan P-2207 menunggu konfirmasi toko Anda.',
-          'Hari ini',
+          pendingOrders.isEmpty
+              ? 'Tidak ada pesanan baru'
+              : 'Pesanan ${pendingOrders.first.id} perlu diproses',
+          pendingOrders.isEmpty
+              ? 'Pesanan baru akan muncul di sini.'
+              : 'Pembayaran diterima dari ${pendingOrders.first.customerName}. Segera proses pesanan.',
+          pendingOrders.isEmpty ? 'Hari ini' : _formatDate(pendingOrders.first.date),
+          pendingOrders.isNotEmpty,
         ),
         (
           Icons.inventory_2_outlined,
           'Stok produk menipis',
           'Periksa kembali jumlah stok produk yang tersedia.',
           'Kemarin',
+          false,
         ),
       ],
     };
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(18, 22, 18, 28),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
       children: [
-        const _PageHeading(
-          eyebrow: 'Pembaruan akun',
-          title: 'Notifikasi',
-          subtitle: '',
-        ),
-        Align(
-          alignment: Alignment.centerRight,
-          child: TextButton.icon(
-            onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Notifikasi ditandai sudah dibaca.')),
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'Notifikasi',
+                style: TextStyle(
+                  color: _ink,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
             ),
-            icon: const Icon(Icons.done_all_rounded, size: 17),
-            label: const Text('Tandai dibaca'),
-          ),
+            TextButton.icon(
+              onPressed: () => setState(() => _allRead = true),
+              icon: const Icon(Icons.done_all_rounded, size: 15),
+              label: Text(_allRead ? 'Sudah dibaca' : 'Tandai dibaca'),
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFF25833E),
+                textStyle: const TextStyle(fontSize: 11),
+              ),
+            ),
+          ],
         ),
-        if (role == SihamaRole.pelapor) ...[
-          const Text('Status Pesanan', style: TextStyle(color: _ink, fontSize: 16, fontWeight: FontWeight.w700)),
+        if (widget.role == SihamaRole.pelapor) ...[
           const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(14),
-            margin: const EdgeInsets.only(bottom: 16),
-            decoration: BoxDecoration(color: Colors.white, border: Border.all(color: const Color(0xFFE1E8E2)), borderRadius: BorderRadius.circular(16)),
-            child: Row(
-              children: [
-                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('Pesanan P-2201', style: TextStyle(color: _ink, fontWeight: FontWeight.w700)), const Text('13 Mei 2025 · 1 item', style: TextStyle(color: _muted, fontSize: 12)), const SizedBox(height: 6), Text(_formatPrice(144000), style: const TextStyle(color: _green, fontSize: 16, fontWeight: FontWeight.w700))])),
-                const _StatusBadge(status: 'Diproses'),
-              ],
+          const Text(
+            'Status Pesanan',
+            style: TextStyle(
+              color: _ink,
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
             ),
           ),
-        ],
-        const Text('Pemberitahuan', style: TextStyle(color: _ink, fontSize: 16, fontWeight: FontWeight.w700)),
-        const SizedBox(height: 8),
-        ...notices.map(
-          (notice) => Container(
-            margin: const EdgeInsets.only(bottom: 10),
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE7F2ED),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Icon(notice.$1, color: _green),
+          const SizedBox(height: 8),
+          if (trackedOrder == null)
+            const _EmptyState(
+              icon: Icons.shopping_bag_outlined,
+              title: 'Belum ada pesanan',
+              message: 'Pesanan AgriMarket akan tercatat di bagian ini.',
+            )
+          else
+            GestureDetector(
+              onTap: () => widget.onOpenOrder(trackedOrder),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFE5ECE6)),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        notice.$2,
-                        style: const TextStyle(
-                          color: _ink,
-                          fontWeight: FontWeight.w700,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Pesanan ${trackedOrder.id}',
+                            style: TextStyle(
+                              color: _ink,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                         ),
+                        _StatusBadge(status: trackedOrder.status),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '${_formatDate(trackedOrder.date).split(' - ').first} · ${trackedOrder.items.length} item',
+                      style: TextStyle(color: _muted, fontSize: 10),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      _formatPrice(trackedOrder.total),
+                      style: TextStyle(
+                        color: Color(0xFF18834A),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        notice.$3,
-                        style: const TextStyle(color: _muted, height: 1.35),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        notice.$4,
-                        style: const TextStyle(color: _green, fontSize: 12),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
+            ),
+          const SizedBox(height: 12),
+          const Text(
+            'Pemberitahuan',
+            style: TextStyle(
+              color: _ink,
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
             ),
           ),
-        ),
-        const _PrototypeNote(),
+          const SizedBox(height: 8),
+        ],
+        ...notices.map((notice) {
+          final unread = notice.$5 && !_allRead;
+          return InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () {
+              setState(() => _allRead = true);
+              if (notice.$1 == Icons.description_outlined &&
+                  widget.role == SihamaRole.pelapor) {
+                final report = widget.reports.cast<CropReport?>().firstWhere(
+                  (item) => item?.status == 'Selesai Ditinjau',
+                  orElse: () =>
+                      widget.reports.isEmpty ? null : widget.reports.first,
+                );
+                if (report != null) widget.onOpenReport(report);
+              } else if (notice.$1 == Icons.shopping_bag_outlined) {
+                final order = widget.role == SihamaRole.mitraToko
+                    ? (pendingOrders.isEmpty ? null : pendingOrders.first)
+                    : trackedOrder ??
+                        (pendingOrders.isEmpty ? null : pendingOrders.first);
+                if (order != null) widget.onOpenOrder(order);
+              } else if (notice.$1 == Icons.chat_bubble_outline_rounded) {
+                widget.onOpenChat();
+              }
+            },
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.all(11),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: unread
+                      ? const Color(0xFF85C991)
+                      : const Color(0xFFE5ECE6),
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFE2F3E6),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(notice.$1, color: _green, size: 17),
+                  ),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          notice.$2,
+                          style: const TextStyle(
+                            color: _ink,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          notice.$3,
+                          style: const TextStyle(
+                            color: _muted,
+                            fontSize: 10,
+                            height: 1.3,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          notice.$4,
+                          style: const TextStyle(color: _muted, fontSize: 9),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (unread) ...[
+                    const SizedBox(width: 6),
+                    const Padding(
+                      padding: EdgeInsets.only(top: 5),
+                      child: Icon(
+                        Icons.circle,
+                        color: Color(0xFF25833E),
+                        size: 8,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          );
+        }),
       ],
     );
   }
@@ -1465,7 +3398,7 @@ class _DiseaseDatabaseTabState extends State<_DiseaseDatabaseTab> {
   final _searchController = TextEditingController();
   String _cropFilter = 'Semua';
 
-  static const _entries = [
+  final List<(String, String, String, IconData)> _entries = [
     (
       'Padi',
       'Hawar Daun Bakteri',
@@ -1492,6 +3425,16 @@ class _DiseaseDatabaseTabState extends State<_DiseaseDatabaseTab> {
     super.dispose();
   }
 
+  Future<void> _editEntry((String, String, String, IconData) entry) async {
+    final updated = await showDialog<(String, String, String, IconData)>(
+      context: context,
+      builder: (_) => _DiseaseEditDialog(entry: entry),
+    );
+    if (updated == null) return;
+    final index = _entries.indexOf(entry);
+    if (index >= 0) setState(() => _entries[index] = updated);
+  }
+
   @override
   Widget build(BuildContext context) {
     final query = _searchController.text.trim().toLowerCase();
@@ -1509,7 +3452,7 @@ class _DiseaseDatabaseTabState extends State<_DiseaseDatabaseTab> {
       children: [
         const _PageHeading(
           eyebrow: 'Referensi penyuluh',
-          title: 'Basis Data Penyakit & Gejala',
+          title: 'Basis Data Gejala-Penyakit',
           subtitle: 'Cari referensi gejala dan penyakit berdasarkan tanaman.',
         ),
         const SizedBox(height: 14),
@@ -1578,6 +3521,11 @@ class _DiseaseDatabaseTabState extends State<_DiseaseDatabaseTab> {
                     ],
                   ),
                 ),
+                IconButton(
+                  tooltip: 'Ubah data penyakit',
+                  onPressed: () => _editEntry(entry),
+                  icon: const Icon(Icons.edit_outlined, color: _green, size: 19),
+                ),
               ],
             ),
           ),
@@ -1588,8 +3536,81 @@ class _DiseaseDatabaseTabState extends State<_DiseaseDatabaseTab> {
   }
 }
 
+class _DiseaseEditDialog extends StatefulWidget {
+  const _DiseaseEditDialog({required this.entry});
+  final (String, String, String, IconData) entry;
+
+  @override
+  State<_DiseaseEditDialog> createState() => _DiseaseEditDialogState();
+}
+
+class _DiseaseEditDialogState extends State<_DiseaseEditDialog> {
+  late final _nameController = TextEditingController(text: widget.entry.$2);
+  late final _descriptionController = TextEditingController(
+    text: widget.entry.$3,
+  );
+  late String _crop = widget.entry.$1;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Ubah data penyakit'),
+    content: SingleChildScrollView(
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        DropdownButtonFormField<String>(
+          value: _crop,
+          decoration: const InputDecoration(labelText: 'Komoditas'),
+          items: ['Padi', 'Cabai', 'Tomat']
+              .map((crop) => DropdownMenuItem(value: crop, child: Text(crop)))
+              .toList(),
+          onChanged: (value) => setState(() => _crop = value ?? _crop),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _nameController,
+          decoration: const InputDecoration(labelText: 'Nama hama/penyakit'),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _descriptionController,
+          minLines: 2,
+          maxLines: 4,
+          decoration: const InputDecoration(labelText: 'Deskripsi/gejala'),
+        ),
+      ]),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Batal'),
+      ),
+      FilledButton(
+        onPressed: () {
+          final name = _nameController.text.trim();
+          final description = _descriptionController.text.trim();
+          if (name.isEmpty || description.isEmpty) return;
+          Navigator.pop(
+            context,
+            (_crop, name, description, widget.entry.$4),
+          );
+        },
+        child: const Text('Simpan'),
+      ),
+    ],
+  );
+}
+
 class _ShopOrdersTab extends StatefulWidget {
-  const _ShopOrdersTab();
+  const _ShopOrdersTab({required this.orders, required this.onUpdateOrder});
+
+  final List<MarketOrder> orders;
+  final Future<bool> Function(MarketOrder order, String status) onUpdateOrder;
 
   @override
   State<_ShopOrdersTab> createState() => _ShopOrdersTabState();
@@ -1597,187 +3618,242 @@ class _ShopOrdersTab extends StatefulWidget {
 
 class _ShopOrdersTabState extends State<_ShopOrdersTab> {
   String _statusFilter = 'Semua';
-  List<LocalOrder> _localOrders = [];
-
-  static const _orders = [
-    ('Hendra', 'P-2198', '10 Mei 2025', 'Selesai', '1 item', 'Rp 68.000'),
-    ('Wahyuni', 'P-2205', '15 Mei 2025', 'Dikirim', '1 item', 'Rp 255.000'),
-    ('Sutrisno', 'P-2207', '16 Mei 2025', 'Dipesan', '2 item', 'Rp 278.000'),
-    (
-      'Budi Santoso',
-      'P-2201',
-      '13 Mei 2025',
-      'Diproses',
-      '1 item',
-      'Rp 144.000',
-    ),
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    _loadLocalOrders();
-  }
-
-  Future<void> _loadLocalOrders() async {
-    try {
-      final database = SihamaDatabase();
-      await database.initialize();
-      final orders = await database.getLocalOrders();
-      if (mounted) setState(() => _localOrders = orders);
-    } catch (_) {
-      // Keep sample orders available if local storage is unavailable.
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
-    final statuses = [
-      'Semua',
-      'Dipesan',
-      'Diproses',
-      'Dikirim',
-      'Selesai',
-      'Dibatalkan',
-    ];
-    final combinedOrders = [
-      ..._orders,
-      ..._localOrders.map((order) => (
-        order.customer,
-        'P-${(order.id ?? 0).toString().padLeft(4, '0')}',
-        _formatDate(order.date),
-        order.status,
-        '${order.itemCount} item',
-        _formatPrice(order.total),
-      )),
-    ];
-    final orders = _statusFilter == 'Semua'
-        ? combinedOrders
-        : combinedOrders.where((order) => order.$4 == _statusFilter);
+    final statuses = ['Semua', 'Dipesan', 'Diproses', 'Dikirim', 'Selesai'];
+    final orders = widget.orders.where(
+      (order) => _statusFilter == 'Semua' || order.status == _statusFilter,
+    );
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(18, 22, 18, 28),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
       children: [
-        const _PageHeading(
-          eyebrow: 'Toko Tani Makmur',
-          title: 'Pesanan Masuk',
-          subtitle: 'Pantau dan perbarui status pesanan pelanggan.',
-        ),
-        const SizedBox(height: 14),
+        const Text('Pesanan Masuk', style: TextStyle(color: _ink, fontSize: 19, fontWeight: FontWeight.w800)),
+        const Text('Toko Tani Makmur', style: TextStyle(color: _muted, fontSize: 10)),
+        const SizedBox(height: 12),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(
             children: statuses
                 .map(
-                  (status) => _CategoryChip(
-                    label: status,
-                    selected: _statusFilter == status,
-                    onTap: () => setState(() => _statusFilter = status),
+                  (status) => Padding(
+                    padding: const EdgeInsets.only(right: 7),
+                    child: ChoiceChip(
+                      label: Text(status, style: TextStyle(fontSize: 11, color: _statusFilter == status ? Colors.white : _ink)),
+                      selected: _statusFilter == status,
+                      showCheckmark: false,
+                      selectedColor: const Color(0xFF25833E),
+                      backgroundColor: Colors.white,
+                      side: BorderSide.none,
+                      visualDensity: VisualDensity.compact,
+                      onSelected: (_) => setState(() => _statusFilter = status),
+                    ),
                   ),
                 )
                 .toList(),
           ),
         ),
-        const SizedBox(height: 14),
-        ...orders.map((order) {
-          final localId = int.tryParse(order.$2.replaceFirst('P-', ''));
-          final matchingOrders = _localOrders
-              .where((candidate) => candidate.id == localId)
-              .toList();
-          final localOrder = matchingOrders.isEmpty ? null : matchingOrders.first;
-          return Card(
-            color: Colors.white,
-            elevation: 0,
-            margin: const EdgeInsets.only(bottom: 10),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 15,
-                vertical: 8,
-              ),
-              title: Text(
-                order.$1,
-                style: const TextStyle(
-                  color: _ink,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              subtitle: Text('${order.$2} · ${order.$3} · ${order.$5}'),
-              trailing: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  _StatusBadge(status: order.$4),
-                  const SizedBox(height: 5),
-                  Text(
-                    order.$6,
-                    style: const TextStyle(
-                      color: _green,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-              onTap: () => showModalBottomSheet<void>(
-                context: context,
-                showDragHandle: true,
-                builder: (context) => Padding(
-                  padding: const EdgeInsets.fromLTRB(22, 8, 22, 30),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        order.$2,
-                        style: const TextStyle(
-                          color: _ink,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text('Pelanggan: ${order.$1}'),
-                      Text('Status: ${order.$4}'),
-                      Text('Jumlah: ${order.$5}'),
-                      Text('Total: ${order.$6}'),
-                      if (localOrder != null) ...[
-                        const SizedBox(height: 10),
-                        Text(localOrder.products, style: const TextStyle(color: _muted)),
-                        if (localOrder.status != 'Selesai' && localOrder.status != 'Dibatalkan') ...[
-                          const SizedBox(height: 14),
-                          SizedBox(
-                            width: double.infinity,
-                            child: FilledButton.icon(
-                              onPressed: () async {
-                                final nextStatus = switch (localOrder!.status) {
-                                  'Dipesan' => 'Diproses',
-                                  'Diproses' => 'Dikirim',
-                                  _ => 'Selesai',
-                                };
-                                await SihamaDatabase().updateLocalOrderStatus(localOrder!.id!, nextStatus);
-                                if (!mounted) return;
-                                Navigator.pop(context);
-                                await _loadLocalOrders();
-                              },
-                              icon: const Icon(Icons.arrow_forward_rounded),
-                              label: Text('Ubah status ke ${switch (localOrder.status) { 'Dipesan' => 'Diproses', 'Diproses' => 'Dikirim', _ => 'Selesai' }}'),
-                            ),
-                          ),
-                        ],
-                      ],
-                      const SizedBox(height: 12),
-                      const _PrototypeNote(),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          );
-        }),
-        const _PrototypeNote(),
+        const SizedBox(height: 8),
+        if (orders.isEmpty)
+          const _EmptyState(
+            icon: Icons.receipt_long_outlined,
+            title: 'Belum ada pesanan',
+            message: 'Pesanan baru dari petani akan muncul di sini.',
+          ),
+        ...orders.map((order) => _ShopOrderCard(
+              order: order,
+              onTap: () => _showOrderDetails(order),
+            )),
       ],
+    );
+  }
+
+  Future<void> _showOrderDetails(MarketOrder order) {
+    return Navigator.of(context).push<void>(MaterialPageRoute<void>(
+      builder: (_) => _ShopOrderDetailScreen(
+        order: order,
+        onUpdateOrder: widget.onUpdateOrder,
+      ),
+    ));
+  }
+
+
+}
+
+class _ShopOrderCard extends StatelessWidget {
+  const _ShopOrderCard({required this.order, required this.onTap});
+
+  final MarketOrder order;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    margin: const EdgeInsets.only(bottom: 9),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(15),
+      border: Border.all(color: const Color(0xFFE5ECE6)),
+    ),
+    child: InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(15),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(order.customerName, style: const TextStyle(
+                    color: _ink, fontSize: 12, fontWeight: FontWeight.w800,
+                  )),
+                ),
+                _StatusBadge(status: order.status),
+              ],
+            ),
+            const SizedBox(height: 3),
+            Text(
+              '${order.id} · ${_formatDate(order.date).split(' - ').first}',
+              style: const TextStyle(color: _muted, fontSize: 10),
+            ),
+            const SizedBox(height: 7),
+            Row(
+              children: [
+                Expanded(
+                  child: Text('${order.items.length} item',
+                    style: const TextStyle(color: _muted, fontSize: 10)),
+                ),
+                Text(_formatPrice(order.total), style: const TextStyle(
+                  color: Color(0xFF18834A), fontSize: 12, fontWeight: FontWeight.w800,
+                )),
+              ],
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _ShopOrderDetailScreen extends StatelessWidget {
+  const _ShopOrderDetailScreen({required this.order, required this.onUpdateOrder});
+
+  final MarketOrder order;
+  final Future<bool> Function(MarketOrder order, String status) onUpdateOrder;
+
+  @override
+  Widget build(BuildContext context) {
+    const steps = ['Dipesan', 'Diproses', 'Dikirim', 'Selesai'];
+    final active = steps.indexOf(order.status);
+    final nextStatus = switch (order.status) {
+      'Dipesan' => 'Diproses',
+      'Diproses' => 'Dikirim',
+      'Dikirim' => 'Selesai',
+      _ => null,
+    };
+    return Scaffold(
+      backgroundColor: _surface,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        foregroundColor: _ink,
+        elevation: 0,
+        title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Pesanan ${order.id}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+          Text('${order.customerName} · ${_formatDate(order.date).split(' - ').first}', style: const TextStyle(fontSize: 10, color: _muted)),
+        ]),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
+        children: [
+          Row(children: [
+            const Expanded(child: Text('Status', style: TextStyle(color: _ink, fontWeight: FontWeight.w800))),
+            _StatusBadge(status: order.status),
+          ]),
+          const SizedBox(height: 8),
+          _DetailCard(title: 'Rincian pesanan', child: Column(children: [
+            ...order.items.map((item) => Padding(
+              padding: const EdgeInsets.only(bottom: 9),
+              child: Row(children: [
+                Expanded(child: Text('${item.productName} × ${item.quantity}', style: const TextStyle(color: _muted, fontSize: 11))),
+                Text(_formatPrice(item.total), style: const TextStyle(color: _ink, fontSize: 11, fontWeight: FontWeight.w700)),
+              ]),
+            )),
+            const Divider(),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              const Text('Total', style: TextStyle(color: _ink, fontWeight: FontWeight.w700)),
+              Text(_formatPrice(order.total), style: const TextStyle(color: Color(0xFF18834A), fontWeight: FontWeight.w800)),
+            ]),
+          ])),
+          const SizedBox(height: 12),
+          const Text('Bukti transfer', style: TextStyle(color: _ink, fontSize: 12, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 7),
+          Container(
+            height: 116,
+            decoration: BoxDecoration(borderRadius: BorderRadius.circular(14), gradient: const LinearGradient(colors: [Color(0xFFD7F0D3), Color(0xFFB8DF9B)])),
+            child: order.transferProofBytes == null
+                ? const Center(child: Text('Bukti transfer belum tersedia', style: TextStyle(color: _green, fontSize: 10)))
+                : ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: Image.memory(order.transferProofBytes!, fit: BoxFit.cover),
+                  ),
+          ),
+          const SizedBox(height: 12),
+          const Text('Perjalanan pesanan', style: TextStyle(color: _ink, fontSize: 12, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 7),
+          _DetailCard(title: 'Status pesanan', child: Column(children: [
+            ...List.generate(steps.length, (index) {
+              final reached = active >= 0 && index <= active;
+              final current = index == active;
+              return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                SizedBox(width: 26, child: Column(children: [
+                  Container(width: 20, height: 20, decoration: BoxDecoration(color: reached ? const Color(0xFF25833E) : const Color(0xFFE3EAE4), shape: BoxShape.circle), child: Icon(index < active ? Icons.check_rounded : Icons.circle, size: 11, color: reached ? Colors.white : _muted)),
+                  if (index < steps.length - 1) Container(width: 2, height: 24, color: index < active ? const Color(0xFF25833E) : const Color(0xFFE3EAE4)),
+                ])),
+                const SizedBox(width: 8),
+                Padding(padding: const EdgeInsets.only(top: 3), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(steps[index], style: TextStyle(color: reached ? _ink : _muted, fontSize: 11, fontWeight: current ? FontWeight.w800 : FontWeight.w600)),
+                  if (current) const Text('Status saat ini', style: TextStyle(color: _muted, fontSize: 9)),
+                ])),
+              ]);
+            }),
+            if (order.status == 'Dibatalkan') const Align(alignment: Alignment.centerLeft, child: Text('Pesanan dibatalkan', style: TextStyle(color: Color(0xFF9B4038), fontSize: 11))),
+          ])),
+          if (nextStatus != null) ...[
+            const SizedBox(height: 14),
+            SizedBox(height: 46, child: FilledButton(
+              onPressed: () async {
+                final saved = await onUpdateOrder(order, nextStatus);
+                if (saved && context.mounted) Navigator.of(context).pop();
+              },
+              child: Text(switch (nextStatus) {
+                'Diproses' => 'Konfirmasi pesanan',
+                'Dikirim' => 'Tandai dikirim',
+                _ => 'Tandai selesai',
+              }),
+            )),
+          ],
+          if (order.status == 'Dipesan' || order.status == 'Diproses')
+            TextButton(
+              onPressed: () async {
+                final cancel = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
+                  title: const Text('Batalkan pesanan?'),
+                  content: const Text('Stok produk akan dikembalikan ke katalog toko.'),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Kembali')),
+                    FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Batalkan')),
+                  ],
+                ));
+                if (cancel == true && context.mounted) {
+                  final saved = await onUpdateOrder(order, 'Dibatalkan');
+                  if (saved && context.mounted) Navigator.of(context).pop();
+                }
+              },
+              child: const Text('Batalkan pesanan', style: TextStyle(color: Color(0xFF9B4038))),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -1832,6 +3908,7 @@ class _ProfileTab extends StatelessWidget {
     required this.onDelete,
     required this.onLogout,
     required this.reportCount,
+    required this.orderCount,
   });
 
   final FarmerProfile? profile;
@@ -1840,6 +3917,7 @@ class _ProfileTab extends StatelessWidget {
   final VoidCallback onDelete;
   final VoidCallback? onLogout;
   final int reportCount;
+  final int orderCount;
 
   @override
   Widget build(BuildContext context) {
@@ -1947,7 +4025,7 @@ class _ProfileTab extends StatelessWidget {
               Expanded(
                 child: _ProfileStat(
                   label: 'Pesanan',
-                  value: role == SihamaRole.mitraToko ? '4' : '1',
+                  value: '$orderCount',
                   icon: Icons.shopping_bag_outlined,
                 ),
               ),
@@ -1985,20 +4063,6 @@ class _ProfileTab extends StatelessWidget {
                   ? 'Belum diisi'
                   : details.address,
               onTap: onEdit,
-            ),
-            const SizedBox(height: 10),
-            OutlinedButton.icon(
-              onPressed: onDelete,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFF9B4038),
-                minimumSize: const Size.fromHeight(50),
-                side: const BorderSide(color: Color(0xFFE8D6D4)),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-              ),
-              icon: const Icon(Icons.delete_outline_rounded),
-              label: const Text('Hapus profil'),
             ),
           ],
         ],
@@ -2039,6 +4103,20 @@ class _ProfileTab extends StatelessWidget {
           onTap: () => _showProfileMessage(context, 'Bantuan'),
         ),
         const SizedBox(height: 12),
+        if (isReporter) ...[
+          OutlinedButton.icon(
+            onPressed: onDelete,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF9B4038),
+              minimumSize: const Size.fromHeight(50),
+              side: const BorderSide(color: Color(0xFFE8D6D4)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+            icon: const Icon(Icons.delete_outline_rounded),
+            label: const Text('Hapus akun'),
+          ),
+          const SizedBox(height: 10),
+        ],
         OutlinedButton.icon(
           onPressed: onLogout == null
               ? null
@@ -2109,8 +4187,8 @@ class _ReportCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                width: 64,
-                height: 64,
+                width: 76,
+                height: 76,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(16),
                   gradient: const LinearGradient(
@@ -2120,9 +4198,9 @@ class _ReportCard extends StatelessWidget {
                   ),
                 ),
                 child: const Icon(
-                  Icons.eco_outlined,
-                  size: 30,
-                  color: _green,
+                  Icons.grass_rounded,
+                  size: 38,
+                  color: Colors.white,
                 ),
               ),
               const SizedBox(width: 12),
@@ -2150,7 +4228,7 @@ class _ReportCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      '${report.crop} - ${report.location}',
+                      _reportTitle(report),
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
@@ -2213,8 +4291,8 @@ class _StatusBadge extends StatelessWidget {
     final (label, background, foreground) = switch (status) {
       'Diajukan' => (
         'Diajukan',
-        const Color(0xFFFFF4D6),
-        const Color(0xFF7A4B00),
+        const Color(0xFFE8F7EE),
+        const Color(0xFF1E8A5D),
       ),
       'Ditinjau' => (
         'Ditinjau',
@@ -2223,8 +4301,33 @@ class _StatusBadge extends StatelessWidget {
       ),
       'Selesai Ditinjau' => (
         'Selesai Ditinjau',
-        const Color(0xFFDCF5E1),
-        const Color(0xFF14612B),
+        const Color(0xFFE7F0FA),
+        const Color(0xFF356A9A),
+      ),
+      'Diproses' => (
+        'Diproses',
+        const Color(0xFFE7F0FA),
+        const Color(0xFF356A9A),
+      ),
+      'Dikirim' => (
+        'Dikirim',
+        const Color(0xFFE7F0FA),
+        const Color(0xFF356A9A),
+      ),
+      'Selesai' => (
+        'Selesai',
+        const Color(0xFFE8F7EE),
+        const Color(0xFF1E8A5D),
+      ),
+      'Dibatalkan' => (
+        'Dibatalkan',
+        const Color(0xFFFCE9E7),
+        const Color(0xFF9B4038),
+      ),
+      'Dipesan' => (
+        'Dipesan',
+        const Color(0xFFFFF2D8),
+        const Color(0xFF93640A),
       ),
       _ => (status, const Color(0xFFE8F7EE), const Color(0xFF1E8A5D)),
     };
@@ -2250,115 +4353,150 @@ class _StatusBadge extends StatelessWidget {
 class _ProductCard extends StatelessWidget {
   const _ProductCard({
     required this.product,
+    required this.canOrder,
     required this.canManage,
     required this.onOrder,
-    required this.onRemove,
-    required this.quantity,
+    required this.onChangeStock,
     required this.onEdit,
     required this.onDelete,
   });
 
   final MarketProduct product;
+  final bool canOrder;
   final bool canManage;
   final VoidCallback onOrder;
-  final VoidCallback onRemove;
-  final int quantity;
+  final ValueChanged<int> onChangeStock;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
-    final recommended = !canManage && product.category == 'Bakterisida';
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border.all(
-          color: recommended ? _forest : const Color(0xFFE1E8E2),
-          width: recommended ? 2 : 1,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: const [BoxShadow(color: Color(0x0A1E3C23), blurRadius: 2, offset: Offset(0, 1))],
+        borderRadius: BorderRadius.circular(20),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          if (recommended) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(color: const Color(0xFFDCF5E1), borderRadius: BorderRadius.circular(99)),
-              child: const Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.verified_rounded, size: 13, color: _green), SizedBox(width: 4), Text('Direkomendasikan', style: TextStyle(color: _green, fontSize: 12, fontWeight: FontWeight.w600))]),
+          Container(
+            width: 74,
+            height: 74,
+            decoration: BoxDecoration(
+              color: _productColor(product.category),
+              borderRadius: BorderRadius.circular(17),
             ),
-            const SizedBox(height: 10),
-          ],
-          Row(
-            children: [
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(color: _productColor(), borderRadius: BorderRadius.circular(12)),
-                child: Icon(_productIcon(), size: 28, color: _green),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(product.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _ink, fontWeight: FontWeight.w700, fontSize: 14)),
-                    Text('${product.category} · Toko Tani Makmur', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _muted, fontSize: 11)),
-                    const SizedBox(height: 4),
-                    Text(_formatPrice(product.price), style: const TextStyle(color: _green, fontWeight: FontWeight.w700, fontSize: 16)),
-                  ],
+            child: product.photoBytes == null
+                ? Icon(_productIcon(product.category), size: 34, color: _green)
+                : ClipRRect(
+                    borderRadius: BorderRadius.circular(17),
+                    child: Image.memory(product.photoBytes!, fit: BoxFit.cover),
+                  ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  product.category,
+                  style: const TextStyle(color: _muted, fontSize: 11),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Text('Stok ${product.stock}', style: const TextStyle(color: _muted, fontSize: 12)),
-              const Spacer(),
-              if (canManage)
-                PopupMenuButton<_CrudAction>(
-                  tooltip: 'Aksi produk',
-                  onSelected: (action) => action == _CrudAction.edit ? onEdit() : onDelete(),
-                  itemBuilder: (context) => const [PopupMenuItem(value: _CrudAction.edit, child: Text('Edit produk')), PopupMenuItem(value: _CrudAction.delete, child: Text('Hapus produk'))],
-                )
-              else ...[
-                _QuantityButton(icon: Icons.remove_rounded, onTap: quantity == 0 ? null : onRemove),
-                SizedBox(width: 36, child: Text('$quantity', textAlign: TextAlign.center, style: const TextStyle(color: _ink, fontWeight: FontWeight.w700))),
-                _QuantityButton(icon: Icons.add_rounded, filled: true, onTap: product.stock > 0 ? onOrder : null),
+                const SizedBox(height: 4),
+                Text(
+                  product.name,
+                  style: const TextStyle(
+                    color: _ink,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  _formatPrice(product.price),
+                  style: const TextStyle(
+                    color: _green,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                if (canManage)
+                  Row(
+                    children: [
+                      const Expanded(child: Text('Stok', style: TextStyle(color: _muted, fontSize: 10))),
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+                        onPressed: product.stock == 0 ? null : () => onChangeStock(product.stock - 1),
+                        icon: const Icon(Icons.remove_circle_outline, size: 17),
+                      ),
+                      Text('${product.stock}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700)),
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+                        onPressed: () => onChangeStock(product.stock + 1),
+                        icon: const Icon(Icons.add_circle_outline, size: 17),
+                      ),
+                    ],
+                  ),
+                if (!canManage) Text(
+                  'Stok ${product.stock} · ${product.stock <= 5 ? 'Stok Menipis' : 'Tersedia'}',
+                  style: TextStyle(
+                    color: product.stock <= 5
+                        ? const Color(0xFF93640A)
+                        : _muted,
+                    fontSize: 11,
+                  ),
+                ),
               ],
-            ],
+            ),
           ),
+          const SizedBox(width: 6),
+          if (canManage)
+            PopupMenuButton<_CrudAction>(
+              tooltip: 'Aksi produk',
+              onSelected: (action) {
+                if (action == _CrudAction.edit) {
+                  onEdit();
+                } else {
+                  onDelete();
+                }
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: _CrudAction.edit,
+                  child: Text('Edit produk'),
+                ),
+                PopupMenuItem(
+                  value: _CrudAction.delete,
+                  child: Text('Hapus produk'),
+                ),
+              ],
+            )
+          else
+            IconButton.filledTonal(
+              onPressed: canOrder && product.stock == 0 ? null : onOrder,
+              tooltip: canOrder
+                  ? product.stock == 0
+                        ? 'Stok habis'
+                        : 'Tambah ${product.name} ke keranjang'
+                  : 'Pemesanan terkunci',
+              style: IconButton.styleFrom(
+                foregroundColor: _green,
+                backgroundColor: const Color(0xFFE7F2ED),
+              ),
+              icon: Icon(
+                !canOrder
+                    ? Icons.lock_outline_rounded
+                    : product.stock == 0
+                    ? Icons.remove_shopping_cart_outlined
+                    : Icons.add_shopping_cart_rounded,
+                size: 20,
+              ),
+            ),
         ],
       ),
     );
   }
-}
-
-class _QuantityButton extends StatelessWidget {
-  const _QuantityButton({required this.icon, required this.onTap, this.filled = false});
-
-  final IconData icon;
-  final VoidCallback? onTap;
-  final bool filled;
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    width: 44,
-    height: 44,
-    child: IconButton(
-      onPressed: onTap,
-      tooltip: icon == Icons.add_rounded ? 'Tambah jumlah' : 'Kurangi jumlah',
-      style: IconButton.styleFrom(
-        backgroundColor: filled ? _forest : Colors.white,
-        foregroundColor: filled ? Colors.white : _muted,
-        side: filled ? BorderSide.none : const BorderSide(color: Color(0xFFE1E8E2)),
-      ),
-      icon: Icon(icon, size: 18),
-    ),
-  );
 }
 
 class _ProfileMenuTile extends StatelessWidget {
@@ -2415,18 +4553,33 @@ class _PageHeading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      label: eyebrow,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: const TextStyle(color: _ink, fontSize: 20, height: 1.25, fontWeight: FontWeight.w800)),
-          if (subtitle.isNotEmpty) ...[
-            const SizedBox(height: 2),
-            Text(subtitle, style: const TextStyle(color: _muted, fontSize: 12, height: 1.35)),
-          ],
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          eyebrow,
+          style: const TextStyle(
+            color: _green,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.2,
+          ),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          title,
+          style: const TextStyle(
+            color: _ink,
+            fontSize: 27,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          subtitle,
+          style: const TextStyle(color: _muted, fontSize: 14, height: 1.4),
+        ),
+      ],
     );
   }
 }
@@ -2507,13 +4660,13 @@ class _CategoryChip extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
           decoration: BoxDecoration(
-            color: selected ? _forest : Colors.white,
+            color: selected ? const Color(0xFFDCEDE4) : Colors.white,
             borderRadius: BorderRadius.circular(999),
           ),
           child: Text(
             label,
             style: TextStyle(
-              color: selected ? Colors.white : _ink,
+              color: selected ? _forest : _muted,
               fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
             ),
           ),
@@ -2543,51 +4696,20 @@ class _PrototypeNote extends StatelessWidget {
   }
 }
 
-class _FieldPainter extends CustomPainter {
-  const _FieldPainter();
+class _FallbackChatRepository implements SihamaChatRepository {
+  static final Map<String, List<ChatMessage>> _messagesByReport = {};
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..style = PaintingStyle.fill;
-    paint.color = const Color(0xFF6FA76D).withValues(alpha: 0.38);
-    canvas.drawRect(
-      Rect.fromLTWH(0, size.height * 0.58, size.width, size.height * 0.42),
-      paint,
-    );
-    paint.color = Colors.white.withValues(alpha: 0.18);
-    for (var i = 0; i < 8; i++) {
-      final y = size.height * 0.1 + i * 28;
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTWH(0, y, size.width, 8),
-          const Radius.circular(6),
-        ),
-        paint,
-      );
-    }
-    paint.color = const Color(0xFF2C6E43).withValues(alpha: 0.22);
-    final path = Path()
-      ..moveTo(0, size.height * 0.72)
-      ..quadraticBezierTo(
-        size.width * 0.35,
-        size.height * 0.55,
-        size.width * 0.5,
-        size.height * 0.82,
-      )
-      ..quadraticBezierTo(
-        size.width * 0.75,
-        size.height,
-        size.width,
-        size.height * 0.72,
-      )
-      ..lineTo(size.width, size.height)
-      ..lineTo(0, size.height)
-      ..close();
-    canvas.drawPath(path, paint);
+  Future<List<ChatMessage>> getChatMessages(String reportId) async {
+    final messages = List<ChatMessage>.of(_messagesByReport[reportId] ?? const []);
+    messages.sort((a, b) => a.sentAt.compareTo(b.sentAt));
+    return messages;
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  Future<void> addChatMessage(ChatMessage message) async {
+    _messagesByReport.putIfAbsent(message.reportId, () => []).add(message);
+  }
 }
 
 enum _HistoryFilter {
@@ -2711,22 +4833,25 @@ class _ReportFormDialogState extends State<_ReportFormDialog> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                DropdownButtonFormField<String>(
-                  initialValue: _crop,
-                  decoration: _inputDecoration('Tanaman'),
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'Padi sawah',
-                      child: Text('Padi sawah'),
-                    ),
-                    DropdownMenuItem(value: 'Cabai', child: Text('Cabai')),
-                    DropdownMenuItem(value: 'Tomat', child: Text('Tomat')),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) setState(() => _crop = value);
-                  },
-                ),
-                const SizedBox(height: 12),
+                if (widget.report.crop != _unspecifiedCrop) ...[
+                  DropdownButtonFormField<String>(
+                    initialValue: _crop,
+                    decoration: _inputDecoration('Tanaman'),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'Padi sawah',
+                        child: Text('Padi sawah'),
+                      ),
+                      DropdownMenuItem(value: 'Padi', child: Text('Padi')),
+                      DropdownMenuItem(value: 'Cabai', child: Text('Cabai')),
+                      DropdownMenuItem(value: 'Tomat', child: Text('Tomat')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) setState(() => _crop = value);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 TextFormField(
                   controller: _locationController,
                   decoration: _inputDecoration('Lokasi atau nama petak'),
@@ -2784,6 +4909,7 @@ class _ReportFormDialogState extends State<_ReportFormDialog> {
                 description: _descriptionController.text.trim(),
                 date: widget.report.date,
                 status: _status,
+                photoBytes: widget.report.photoBytes,
               ),
             );
           },
@@ -2792,6 +4918,145 @@ class _ReportFormDialogState extends State<_ReportFormDialog> {
       ],
     );
   }
+}
+
+class _ProductFormScreen extends StatefulWidget {
+  const _ProductFormScreen({this.product, required this.imagePicker});
+
+  final MarketProduct? product;
+  final ReportImagePicker imagePicker;
+
+  @override
+  State<_ProductFormScreen> createState() => _ProductFormScreenState();
+}
+
+class _ProductFormScreenState extends State<_ProductFormScreen> {
+  final _formKey = GlobalKey<FormState>();
+  late final _nameController = TextEditingController(text: widget.product?.name ?? '');
+  late final _priceController = TextEditingController(text: widget.product?.price.toString() ?? '');
+  late final _stockController = TextEditingController(text: widget.product?.stock.toString() ?? '');
+  late final _descriptionController = TextEditingController(text: widget.product?.description ?? '');
+  late String _category = widget.product?.category ?? 'Fungisida';
+  ReportImage? _image;
+
+  static const _categories = ['Fungisida', 'Bakterisida', 'Insektisida', 'Herbisida'];
+
+  @override
+  void initState() {
+    super.initState();
+    final bytes = widget.product?.photoBytes;
+    if (bytes != null) _image = ReportImage(name: 'Foto produk', bytes: bytes);
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _priceController.dispose();
+    _stockController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickImage() async {
+    try {
+      final image = await widget.imagePicker();
+      if (image == null || !mounted) return;
+      final error = validateReportImage(image);
+      if (error != null) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+        return;
+      }
+      setState(() => _image = image);
+    } on ReportImagePickerException catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Foto produk gagal dibuka: $error')));
+    }
+  }
+
+  void _save() {
+    if (!_formKey.currentState!.validate()) return;
+    if (_image == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Unggah foto produk terlebih dahulu.')));
+      return;
+    }
+    Navigator.of(context).pop(MarketProduct(
+      id: widget.product?.id,
+      name: _nameController.text.trim(),
+      category: _category,
+      price: int.parse(_priceController.text.trim()),
+      stock: int.parse(_stockController.text.trim()),
+      description: _descriptionController.text.trim(),
+      photoBytes: _image!.bytes,
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: _surface,
+    appBar: AppBar(
+      backgroundColor: Colors.white,
+      foregroundColor: _ink,
+      elevation: 0,
+      title: Text(widget.product == null ? 'Tambah Produk' : 'Ubah Produk', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+    ),
+    body: Form(
+      key: _formKey,
+      child: ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 20), children: [
+        const _FormLabel('Nama produk'),
+        const SizedBox(height: 6),
+        TextFormField(controller: _nameController, decoration: _inputDecoration('Contoh: Kocide 54 WDG'), validator: _requiredValue),
+        const SizedBox(height: 14),
+        const _FormLabel('Jenis'),
+        const SizedBox(height: 6),
+        Wrap(spacing: 7, runSpacing: 6, children: _categories.map((category) => ChoiceChip(
+          label: Text(category, style: TextStyle(fontSize: 10, color: category == _category ? Colors.white : _ink)),
+          selected: category == _category,
+          showCheckmark: false,
+          selectedColor: const Color(0xFF25833E),
+          backgroundColor: Colors.white,
+          side: BorderSide.none,
+          onSelected: (_) => setState(() => _category = category),
+        )).toList()),
+        const SizedBox(height: 12),
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const _FormLabel('Harga (Rp)'), const SizedBox(height: 6),
+            TextFormField(controller: _priceController, keyboardType: TextInputType.number, decoration: _inputDecoration('Harga'), validator: (value) { final price = int.tryParse(value ?? ''); return price == null || price < 0 ? 'Masukkan harga yang valid.' : null; }),
+          ])),
+          const SizedBox(width: 10),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const _FormLabel('Stok'), const SizedBox(height: 6),
+            TextFormField(controller: _stockController, keyboardType: TextInputType.number, decoration: _inputDecoration('Jumlah'), validator: (value) { final stock = int.tryParse(value ?? ''); return stock == null || stock < 0 ? 'Masukkan stok yang valid.' : null; }),
+          ])),
+        ]),
+        const SizedBox(height: 14),
+        const _FormLabel('Deskripsi'),
+        const SizedBox(height: 6),
+        TextFormField(controller: _descriptionController, minLines: 3, maxLines: 5, decoration: _inputDecoration('Tulis kegunaan dan cara penggunaan produk'), validator: _requiredValue),
+        const SizedBox(height: 14),
+        const _FormLabel('Foto produk'),
+        const SizedBox(height: 6),
+        InkWell(
+          onTap: _pickImage,
+          borderRadius: BorderRadius.circular(13),
+          child: Container(
+            height: 126,
+            width: double.infinity,
+            decoration: BoxDecoration(color: const Color(0xFFF0F8F1), borderRadius: BorderRadius.circular(13), border: Border.all(color: const Color(0xFF71C883), width: 1.2)),
+            child: _image == null
+                ? const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.add_photo_alternate_outlined, color: _green), SizedBox(height: 5), Text('Unggah foto produk', style: TextStyle(color: _green, fontSize: 11, fontWeight: FontWeight.w700)), Text('PNG/JPG, maks. 5 MB', style: TextStyle(color: _muted, fontSize: 9))])
+                : ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.memory(_image!.bytes, fit: BoxFit.cover)),
+          ),
+        ),
+        if (_image != null) Align(alignment: Alignment.centerRight, child: TextButton(onPressed: _pickImage, child: const Text('Ganti foto'))),
+      ]),
+    ),
+    bottomNavigationBar: SafeArea(child: Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: SizedBox(height: 46, child: FilledButton(onPressed: _save, child: Text(widget.product == null ? 'Simpan Produk' : 'Simpan Perubahan'))),
+    )),
+  );
 }
 
 class _ProductFormDialog extends StatefulWidget {
@@ -3046,12 +5311,45 @@ String _formatPrice(int price) {
   return 'Rp$grouped';
 }
 
-IconData _productIcon() {
-  return Icons.eco_outlined;
+IconData _productIcon(String category) {
+  if (category == 'Fungisida') return Icons.spa_outlined;
+  if (category == 'Bakterisida') return Icons.biotech_outlined;
+  if (category == 'Insektisida') return Icons.pest_control_outlined;
+  return Icons.grass_rounded;
 }
 
-Color _productColor() {
-  return const Color(0xFFD7F0DA);
+String _suggestedDiagnosis(String crop) {
+  final normalizedCrop = crop.toLowerCase();
+  if (normalizedCrop.contains('cabai')) return 'Antraknosa';
+  if (normalizedCrop.contains('tomat')) return 'Layu Fusarium';
+  if (normalizedCrop.contains('padi')) return 'Hawar Daun Bakteri';
+  return 'perlu pemeriksaan lebih lanjut';
+}
+
+List<MarketProduct> _recommendedProducts(
+  CropReport report,
+  List<MarketProduct> products,
+) {
+  final storedNames = RegExp(r'Obat yang disarankan:\s*([^\n]+)')
+      .firstMatch(report.recommendation ?? '')
+      ?.group(1)
+      ?.split(',')
+      .map((name) => name.trim())
+      .where((name) => name.isNotEmpty)
+      .toSet();
+  if (storedNames != null && storedNames.isNotEmpty) {
+    return products
+        .where((product) => storedNames.contains(product.name))
+        .toList();
+  }
+  return products.where((product) => product.stock > 0).take(2).toList();
+}
+
+Color _productColor(String category) {
+  if (category == 'Fungisida') return const Color(0xFFEAF0D8);
+  if (category == 'Bakterisida') return const Color(0xFFE1EAF1);
+  if (category == 'Insektisida') return const Color(0xFFF2E8D8);
+  return const Color(0xFFDDF0E4);
 }
 
 String _initials(String name) {
