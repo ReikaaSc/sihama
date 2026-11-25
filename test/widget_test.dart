@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:sihama/auth_screen.dart';
 import 'package:sihama/data/diagnosis_dataset.dart';
 import 'package:sihama/data/report_image.dart';
 import 'package:sihama/data/sihama_repository.dart';
@@ -12,6 +13,29 @@ import 'package:sihama/data/sihama_role.dart';
 import 'package:sihama/sihama_shell.dart';
 
 void main() {
+  testWidgets('auth screen shows logo and validates email before signup', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(home: AuthScreen(onAuthenticated: (_) {})),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(Image), findsOneWidget);
+    final registrationToggle = find.text('Belum punya akun? Daftar');
+    await tester.ensureVisible(registrationToggle);
+    await tester.tap(registrationToggle);
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextFormField).at(1), 'invalid-email');
+    final submitButton = find.text('Daftar');
+    await tester.ensureVisible(submitButton);
+    await tester.tap(submitButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Masukkan alamat email yang valid.'), findsOneWidget);
+  });
+
   testWidgets('diagnosis dataset parses all bundled records', (
     WidgetTester tester,
   ) async {
@@ -338,7 +362,10 @@ void main() {
     await tester.tap(find.byTooltip('Percakapan'));
     await tester.pumpAndSettle();
     expect(find.text('Percakapan'), findsOneWidget);
-    expect(find.text('Ir. Siti Rahmawati'), findsOneWidget);
+    expect(
+      find.text('Belum ada pesan. Ketuk untuk memulai percakapan.'),
+      findsOneWidget,
+    );
     await tester.tap(find.byTooltip('Kembali'));
     await tester.pumpAndSettle();
 
@@ -346,10 +373,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Status Pesanan'), findsOneWidget);
     expect(find.text('Pesanan P-2201'), findsOneWidget);
-    expect(find.text('Tandai dibaca'), findsOneWidget);
-    await tester.tap(find.text('Tandai dibaca'));
-    await tester.pumpAndSettle();
-    expect(find.text('Sudah dibaca'), findsOneWidget);
+    expect(find.textContaining('SIH-240618'), findsOneWidget);
+    expect(find.textContaining('L-1042'), findsNothing);
 
     await tester.tap(find.text('Laporan'));
     await tester.pumpAndSettle();
@@ -392,16 +417,25 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Budi Santoso'), findsOneWidget);
 
-    await tester.drag(find.byType(ListView).first, const Offset(0, -350));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Hapus profil'));
+    await tester.scrollUntilVisible(
+      find.text('Hapus akun'),
+      200,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(find.text('Hapus akun'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Hapus'));
     await tester.pumpAndSettle();
-    await tester.drag(find.byType(ListView).first, const Offset(0, 500));
+    await tester.tap(find.text('Ya, hapus akun'));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Profil belum dibuat'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('Profil belum dibuat'), findsOneWidget);
 
+    await tester.ensureVisible(find.text('Buat profil'));
     await tester.tap(find.text('Buat profil'));
     await tester.pumpAndSettle();
     final createProfileFields = find.descendant(
@@ -413,6 +447,58 @@ void main() {
     await tester.tap(find.text('Simpan'));
     await tester.pumpAndSettle();
     expect(find.text('Budi Baru'), findsOneWidget);
+  });
+
+  testWidgets('all roles show account identity and data-backed notifications', (
+    WidgetTester tester,
+  ) async {
+    for (final role in SihamaRole.values) {
+      final repository = _MemoryRepository()
+        ..profile = null
+        ..orders.clear();
+      if (role == SihamaRole.mitraToko) {
+        repository.orders.add(
+          MarketOrder(
+            id: 'P-AKTUAL',
+            customerName: 'Nama Akun Aktual',
+            date: DateTime(2025, 6, 20, 10),
+            status: 'Dipesan',
+            items: const [],
+          ),
+        );
+      }
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SihamaShell(
+            key: ValueKey(role),
+            repository: repository,
+            role: role,
+            userName: 'Nama Akun Aktual',
+            userEmail: 'akun@example.com',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      if (role == SihamaRole.pelapor) {
+        expect(find.text('Nama Akun Aktual'), findsOneWidget);
+      }
+      await tester.tap(find.text('Notifikasi').last);
+      await tester.pumpAndSettle();
+      expect(find.text('L-1042'), findsNothing);
+      expect(find.text('Ir. Siti Rahmawati'), findsNothing);
+      expect(find.text('Stok produk menipis'), findsNothing);
+      expect(find.text('Tandai dibaca'), findsNothing);
+      if (role == SihamaRole.mitraToko) {
+        expect(find.text('Pesanan P-AKTUAL perlu diproses'), findsOneWidget);
+      }
+
+      await tester.tap(find.text('Profil').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Nama Akun Aktual'), findsOneWidget);
+      await tester.scrollUntilVisible(find.text('akun@example.com'), 200);
+      expect(find.text('akun@example.com'), findsOneWidget);
+    }
   });
 
   testWidgets(
@@ -537,7 +623,10 @@ void main() {
       await tester.tap(find.text('Notifikasi'));
       await tester.pumpAndSettle();
       expect(find.text('Notifikasi'), findsWidgets);
-      expect(find.text('Laporan baru masuk'), findsOneWidget);
+      expect(
+        find.text('Laporan SIH-240618 menunggu peninjauan'),
+        findsOneWidget,
+      );
     },
   );
 

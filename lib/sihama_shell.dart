@@ -19,13 +19,17 @@ class SihamaShell extends StatefulWidget {
     this.repository,
     this.imagePicker,
     this.role = SihamaRole.pelapor,
+    this.userName,
+    this.userEmail,
     this.onLogout,
   });
 
   final SihamaRepository? repository;
   final ReportImagePicker? imagePicker;
   final SihamaRole role;
-  final VoidCallback? onLogout;
+  final String? userName;
+  final String? userEmail;
+  final Future<void> Function()? onLogout;
 
   @override
   State<SihamaShell> createState() => _SihamaShellState();
@@ -50,6 +54,18 @@ class _SihamaShellState extends State<SihamaShell> {
 
   bool get _hasReviewedReport =>
       _reports.any((report) => report.status == 'Selesai Ditinjau');
+
+  String get _currentUserName {
+    final profileName = _profile?.name.trim();
+    if (profileName != null &&
+        profileName.isNotEmpty &&
+        profileName != 'Pengguna SIHAMA') {
+      return profileName;
+    }
+    final authName = widget.userName?.trim();
+    if (authName != null && authName.isNotEmpty) return authName;
+    return widget.role.label;
+  }
 
   @override
   void initState() {
@@ -196,6 +212,7 @@ class _SihamaShellState extends State<SihamaShell> {
     final pages = <Widget>[
       if (widget.role == SihamaRole.pelapor)
         _HomeTab(
+          displayName: _currentUserName,
           latestReport: _reports.isEmpty ? null : _reports.first,
           reviewedReport: reviewedReports.isEmpty
               ? null
@@ -211,7 +228,19 @@ class _SihamaShellState extends State<SihamaShell> {
             _showConversations = false;
           }),
           onOpenReport: (report) => _showReportDetails(context, report),
-          onOpenConversations: () => setState(() => _showConversations = true),
+          onOpenConversations: () {
+            if (_reports.isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Buat laporan terlebih dahulu untuk memulai chat.',
+                  ),
+                ),
+              );
+              return;
+            }
+            setState(() => _showConversations = true);
+          },
         ),
       if (widget.role == SihamaRole.pelapor)
         _showReportForm
@@ -252,7 +281,11 @@ class _SihamaShellState extends State<SihamaShell> {
       if (widget.role == SihamaRole.penyuluh)
         _DiseaseDatabaseTab(repository: _repository),
       if (widget.role == SihamaRole.mitraToko)
-        _ShopOrdersTab(orders: _orders, onUpdateOrder: _updateOrder),
+        _ShopOrdersTab(
+          orders: _orders,
+          shopName: _currentUserName,
+          onUpdateOrder: _updateOrder,
+        ),
       if (widget.role != SihamaRole.penyuluh)
         _MarketTab(
           products: _products,
@@ -271,24 +304,19 @@ class _SihamaShellState extends State<SihamaShell> {
         role: widget.role,
         reports: _reports,
         orders: _orders,
-        customerName: _profile?.name ?? 'Petani SIHAMA',
         onOpenReport: (report) => _showReportDetails(context, report),
         onOpenOrder: (order) => _showOrderDetails(context, order),
-        onOpenChat: () =>
-            _openConversation(_reports.isEmpty ? null : _reports.first),
       ),
       _ProfileTab(
         profile: _profile,
         role: widget.role,
+        userName: _currentUserName,
+        userEmail: widget.userEmail,
         onEdit: _editProfile,
         onDelete: _deleteProfile,
         onLogout: widget.onLogout,
         reportCount: _reports.length,
-        orderCount: widget.role == SihamaRole.mitraToko
-            ? _orders.length
-            : _orders
-                  .where((order) => order.customerName == _profile?.name)
-                  .length,
+        orderCount: _orders.length,
       ),
     ];
     if (widget.role == SihamaRole.pelapor &&
@@ -299,6 +327,7 @@ class _SihamaShellState extends State<SihamaShell> {
         report: _reports.isEmpty ? null : _reports.first,
         onOpenChat: () =>
             _openConversation(_reports.isEmpty ? null : _reports.first),
+        repository: _chatRepository,
       );
     }
 
@@ -402,7 +431,7 @@ class _SihamaShellState extends State<SihamaShell> {
                 children: [
                   Expanded(child: _StatusBadge(status: report.status)),
                   Text(
-                    'Pelapor: ${_profile?.name ?? 'Petani SIHAMA'}',
+                    'Pelapor: $_currentUserName',
                     style: const TextStyle(fontSize: 11, color: _muted),
                   ),
                 ],
@@ -623,17 +652,24 @@ class _SihamaShellState extends State<SihamaShell> {
   void _openConversation([CropReport? report]) {
     final conversationReport =
         report ?? (_reports.isEmpty ? null : _reports.first);
+    if (conversationReport == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Buat laporan terlebih dahulu untuk memulai chat.'),
+        ),
+      );
+      return;
+    }
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => _ChatScreen(
           repository: _chatRepository,
           role: widget.role,
-          reportId: conversationReport?.id ?? 'general',
-          reportCaption: conversationReport == null
-              ? 'Konsultasi pertanian'
-              : '${conversationReport.id} · ${_reportTitle(conversationReport)}',
-          reportStatus: conversationReport?.status ?? 'Sesi aktif',
-          reporterName: _profile?.name ?? 'Budi Santoso',
+          reportId: conversationReport.id,
+          reportCaption:
+              '${conversationReport.id} · ${_reportTitle(conversationReport)}',
+          reportStatus: conversationReport.status,
+          currentUserName: _currentUserName,
         ),
       ),
     );
@@ -677,13 +713,11 @@ class _SihamaShellState extends State<SihamaShell> {
 
   Future<MarketOrder?> _checkoutOrder(
     List<MarketOrderItem> items,
-    ReportImage paymentProof,
-    {
-      required String customerName,
-      required String customerPhone,
-      required String deliveryAddress,
-    }
-  ) async {
+    ReportImage paymentProof, {
+    required String customerName,
+    required String customerPhone,
+    required String deliveryAddress,
+  }) async {
     final now = DateTime.now();
     final order = MarketOrder(
       id: 'P-${now.microsecondsSinceEpoch}',
@@ -1003,6 +1037,7 @@ class _BottomNavigation extends StatelessWidget {
 
 class _HomeTab extends StatelessWidget {
   const _HomeTab({
+    required this.displayName,
     required this.latestReport,
     required this.reviewedReport,
     required this.onCreateReport,
@@ -1011,6 +1046,7 @@ class _HomeTab extends StatelessWidget {
     required this.onOpenConversations,
   });
 
+  final String displayName;
   final CropReport? latestReport;
   final CropReport? reviewedReport;
   final VoidCallback onCreateReport;
@@ -1041,7 +1077,7 @@ class _HomeTab extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -1051,7 +1087,7 @@ class _HomeTab extends StatelessWidget {
                         ),
                         SizedBox(height: 3),
                         Text(
-                          'Budi Santoso',
+                          displayName,
                           style: TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.w800,
@@ -1066,11 +1102,14 @@ class _HomeTab extends StatelessWidget {
                       ],
                     ),
                   ),
-                  _UnreadIconButton(
-                    icon: Icons.chat_bubble_outline_rounded,
-                    count: 1,
-                    tooltip: 'Percakapan',
+                  IconButton(
                     onPressed: onOpenConversations,
+                    tooltip: 'Percakapan',
+                    style: IconButton.styleFrom(
+                      backgroundColor: Colors.white.withValues(alpha: 0.18),
+                      foregroundColor: Colors.white,
+                    ),
+                    icon: const Icon(Icons.chat_bubble_outline_rounded),
                   ),
                 ],
               ),
@@ -1181,59 +1220,6 @@ class _HomeTab extends StatelessWidget {
               const SizedBox(height: 20),
               const _WorkflowCard(),
             ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _UnreadIconButton extends StatelessWidget {
-  const _UnreadIconButton({
-    required this.icon,
-    required this.count,
-    required this.tooltip,
-    required this.onPressed,
-  });
-
-  final IconData icon;
-  final int count;
-  final String tooltip;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        IconButton(
-          onPressed: onPressed,
-          tooltip: tooltip,
-          style: IconButton.styleFrom(
-            backgroundColor: Colors.white.withValues(alpha: 0.18),
-            foregroundColor: Colors.white,
-          ),
-          icon: Icon(icon, size: 21),
-        ),
-        Positioned(
-          right: 0,
-          top: 0,
-          child: Container(
-            padding: const EdgeInsets.all(3),
-            decoration: const BoxDecoration(
-              color: Color(0xFFC62828),
-              shape: BoxShape.circle,
-            ),
-            constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
-            child: Text(
-              '$count',
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
           ),
         ),
       ],
@@ -1386,11 +1372,13 @@ class _ConversationTab extends StatefulWidget {
     required this.onBack,
     required this.onOpenChat,
     required this.report,
+    required this.repository,
   });
 
   final VoidCallback onBack;
   final VoidCallback onOpenChat;
   final CropReport? report;
+  final SihamaChatRepository repository;
 
   @override
   State<_ConversationTab> createState() => _ConversationTabState();
@@ -1398,6 +1386,20 @@ class _ConversationTab extends StatefulWidget {
 
 class _ConversationTabState extends State<_ConversationTab> {
   final _searchController = TextEditingController();
+  late Future<List<ChatMessage>> _messagesFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _messagesFuture = _loadMessages();
+  }
+
+  Future<List<ChatMessage>> _loadMessages() {
+    final report = widget.report;
+    return report == null
+        ? Future.value(const <ChatMessage>[])
+        : widget.repository.getChatMessages(report.id);
+  }
 
   @override
   void dispose() {
@@ -1409,11 +1411,8 @@ class _ConversationTabState extends State<_ConversationTab> {
   Widget build(BuildContext context) {
     final report = widget.report;
     final reportCaption = report == null
-        ? 'Konsultasi pertanian'
+        ? ''
         : '${report.id} · ${_reportTitle(report)}';
-    final visible = 'ir siti rahmawati $reportCaption'.toLowerCase().contains(
-      _searchController.text.trim().toLowerCase(),
-    );
 
     return Column(
       children: [
@@ -1450,112 +1449,150 @@ class _ConversationTabState extends State<_ConversationTab> {
           ),
         ),
         Expanded(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
-            children: [
-              TextField(
-                controller: _searchController,
-                onChanged: (_) => setState(() {}),
-                decoration: _inputDecoration('Cari nama, laporan, atau pesan')
-                    .copyWith(
-                      prefixIcon: const Icon(
-                        Icons.search_rounded,
-                        color: _muted,
-                      ),
-                      isDense: true,
-                    ),
-              ),
-              const SizedBox(height: 10),
-              if (visible)
-                Material(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(14),
-                  child: InkWell(
-                    onTap: widget.onOpenChat,
-                    borderRadius: BorderRadius.circular(14),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Row(
-                        children: [
-                          const CircleAvatar(
-                            backgroundColor: Color(0xFFD8F0D5),
-                            child: Text(
-                              'SR',
-                              style: TextStyle(
-                                color: _green,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
+          child: FutureBuilder<List<ChatMessage>>(
+            future: _messagesFuture,
+            builder: (context, snapshot) {
+              final messages = snapshot.data ?? const <ChatMessage>[];
+              final latestMessage = messages.isEmpty ? null : messages.last;
+              final searchText = _searchController.text.trim().toLowerCase();
+              final searchableText = [
+                reportCaption,
+                latestMessage?.senderName ?? '',
+                latestMessage?.text ?? '',
+              ].join(' ').toLowerCase();
+              final isVisible =
+                  searchText.isEmpty || searchableText.contains(searchText);
+
+              return ListView(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
+                children: [
+                  TextField(
+                    controller: _searchController,
+                    onChanged: (_) => setState(() {}),
+                    decoration:
+                        _inputDecoration('Cari nama, laporan, atau pesan')
+                            .copyWith(
+                              prefixIcon: const Icon(
+                                Icons.search_rounded,
+                                color: _muted,
                               ),
+                              isDense: true,
+                            ),
+                  ),
+                  const SizedBox(height: 10),
+                  if (snapshot.connectionState == ConnectionState.waiting)
+                    const Padding(
+                      padding: EdgeInsets.all(20),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  else if (snapshot.hasError)
+                    Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        children: [
+                          const Icon(
+                            Icons.error_outline_rounded,
+                            color: Color(0xFFA1241A),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Percakapan gagal dimuat: ${snapshot.error}',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Color(0xFFA1241A),
+                              fontSize: 12,
                             ),
                           ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
+                          TextButton(
+                            onPressed: () => setState(
+                              () => _messagesFuture = _loadMessages(),
+                            ),
+                            child: const Text('Coba lagi'),
+                          ),
+                        ],
+                      ),
+                    )
+                  else if (report == null)
+                    const _EmptyState(
+                      icon: Icons.chat_bubble_outline_rounded,
+                      title: 'Belum ada percakapan',
+                      message: 'Percakapan akan tersedia setelah Anda membuat laporan.',
+                    )
+                  else if (isVisible)
+                    Material(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      child: InkWell(
+                        onTap: widget.onOpenChat,
+                        borderRadius: BorderRadius.circular(14),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                backgroundColor: const Color(0xFFD8F0D5),
+                                child: Text(
+                                  _initials(
+                                    latestMessage?.senderName ?? 'Percakapan',
+                                  ),
+                                  style: const TextStyle(
+                                    color: _green,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Expanded(
-                                      child: Text(
-                                        'Ir. Siti Rahmawati',
-                                        style: TextStyle(
-                                          color: _ink,
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 12,
-                                        ),
+                                    Text(
+                                      latestMessage?.senderName ??
+                                          'Percakapan laporan',
+                                      style: const TextStyle(
+                                        color: _ink,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 12,
                                       ),
                                     ),
+                                    const SizedBox(height: 3),
                                     Text(
-                                      '09.30',
-                                      style: TextStyle(
-                                        color: _green,
+                                      reportCaption,
+                                      style: const TextStyle(
+                                        color: _muted,
                                         fontSize: 10,
-                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      latestMessage?.text ?? 'Belum ada pesan. Ketuk untuk memulai percakapan.',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: _ink,
+                                        fontSize: 11,
                                       ),
                                     ),
                                   ],
                                 ),
-                                SizedBox(height: 3),
-                                Text(
-                                  reportCaption,
-                                  style: TextStyle(color: _muted, fontSize: 10),
-                                ),
-                                SizedBox(height: 3),
-                                Text(
-                                  'Bercak terlihat sudah tidak melebar...',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(color: _ink, fontSize: 11),
-                                ),
-                                SizedBox(height: 5),
-                                _ActiveChatBadge(),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Container(
-                            width: 18,
-                            height: 18,
-                            alignment: Alignment.center,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF21803D),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Text(
-                              '1',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
                               ),
-                            ),
+                              if (latestMessage != null)
+                                Text(
+                                  '${latestMessage.sentAt.hour.toString().padLeft(2, '0')}.${latestMessage.sentAt.minute.toString().padLeft(2, '0')}',
+                                  style: const TextStyle(
+                                    color: _green,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
                     ),
-                  ),
-                ),
-            ],
+                ],
+              );
+            },
           ),
         ),
       ],
@@ -1570,7 +1607,7 @@ class _ChatScreen extends StatefulWidget {
     required this.reportId,
     required this.reportCaption,
     required this.reportStatus,
-    required this.reporterName,
+    required this.currentUserName,
   });
 
   final SihamaChatRepository repository;
@@ -1578,7 +1615,7 @@ class _ChatScreen extends StatefulWidget {
   final String reportId;
   final String reportCaption;
   final String reportStatus;
-  final String reporterName;
+  final String currentUserName;
 
   @override
   State<_ChatScreen> createState() => _ChatScreenState();
@@ -1588,10 +1625,15 @@ class _ChatScreenState extends State<_ChatScreen> {
   final _controller = TextEditingController();
   late Future<List<ChatMessage>> _messagesFuture;
 
-  bool get _isMine => widget.role == SihamaRole.pelapor;
-  String get _myName => _isMine ? widget.reporterName : 'Ir. Siti Rahmawati';
+  String get _myName => widget.currentUserName;
   String get _partnerName =>
-      _isMine ? 'Ir. Siti Rahmawati' : widget.reporterName;
+      widget.role == SihamaRole.pelapor ? 'Penyuluh' : 'Pelapor';
+
+  bool _isOwnMessage(ChatMessage message) =>
+      message.senderRole.trim().toLowerCase() ==
+          widget.role.name.toLowerCase() ||
+      message.senderRole.trim().toLowerCase() ==
+          widget.role.label.toLowerCase();
 
   @override
   void initState() {
@@ -1613,7 +1655,7 @@ class _ChatScreenState extends State<_ChatScreen> {
       await widget.repository.addChatMessage(
         ChatMessage(
           reportId: widget.reportId,
-          senderRole: widget.role.name,
+          senderRole: widget.role.label,
           senderName: _myName,
           text: value,
           sentAt: DateTime.now(),
@@ -1665,7 +1707,7 @@ class _ChatScreenState extends State<_ChatScreen> {
                   ),
                 ),
                 Text(
-                  '●  Sesi aktif',
+                  'Percakapan laporan',
                   style: TextStyle(fontSize: 10, color: _muted),
                 ),
               ],
@@ -1736,7 +1778,7 @@ class _ChatScreenState extends State<_ChatScreen> {
                         ),
                       ),
                     ...messages.map((message) {
-                      final mine = message.senderRole == widget.role.name;
+                      final mine = _isOwnMessage(message);
                       return Align(
                         alignment: mine
                             ? Alignment.centerRight
@@ -1980,8 +2022,7 @@ class _MarketCheckoutScreenState extends State<_MarketCheckoutScreen> {
   String? _proofError;
   bool _saving = false;
 
-  int get _total =>
-      widget.items.fold(0, (total, item) => total + item.total);
+  int get _total => widget.items.fold(0, (total, item) => total + item.total);
 
   @override
   void dispose() {
@@ -2307,7 +2348,7 @@ class _OrderDetailScreen extends StatelessWidget {
               style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
             ),
             Text(
-              'Toko Tani Makmur · ${_formatDate(order.date)}',
+              'Mitra Toko · ${_formatDate(order.date)}',
               style: const TextStyle(fontSize: 11, color: _muted),
             ),
           ],
@@ -2883,34 +2924,6 @@ class _AdviserReportScreenState extends State<_AdviserReportScreen> {
   );
 }
 
-class _ActiveChatBadge extends StatelessWidget {
-  const _ActiveChatBadge();
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-    decoration: BoxDecoration(
-      color: const Color(0xFFDDF2E3),
-      borderRadius: BorderRadius.circular(20),
-    ),
-    child: const Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(Icons.circle, size: 7, color: Color(0xFF25833E)),
-        SizedBox(width: 4),
-        Text(
-          'Aktif',
-          style: TextStyle(
-            color: Color(0xFF25833E),
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
 class _HistoryTab extends StatefulWidget {
   const _HistoryTab({
     required this.reports,
@@ -3041,8 +3054,6 @@ class _HistoryTabState extends State<_HistoryTab> {
               ),
             ),
           ),
-        const SizedBox(height: 6),
-        const _PrototypeNote(),
       ],
     );
   }
@@ -4077,7 +4088,6 @@ class _MarketTabState extends State<_MarketTab> {
                   ),
                 ),
               ],
-              const _PrototypeNote(),
             ],
           ),
         ),
@@ -4226,9 +4236,7 @@ class _MarketTabState extends State<_MarketTab> {
     if (order == null || !mounted) return;
     setState(_cart.clear);
     await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => _OrderDetailScreen(order: order),
-      ),
+      MaterialPageRoute<void>(builder: (_) => _OrderDetailScreen(order: order)),
     );
   }
 
@@ -4257,102 +4265,89 @@ class _NotificationsTab extends StatefulWidget {
     required this.role,
     required this.reports,
     required this.orders,
-    required this.customerName,
     required this.onOpenReport,
     required this.onOpenOrder,
-    required this.onOpenChat,
   });
 
   final SihamaRole role;
   final List<CropReport> reports;
   final List<MarketOrder> orders;
-  final String customerName;
   final ValueChanged<CropReport> onOpenReport;
   final ValueChanged<MarketOrder> onOpenOrder;
-  final VoidCallback onOpenChat;
 
   @override
   State<_NotificationsTab> createState() => _NotificationsTabState();
 }
 
-class _NotificationsTabState extends State<_NotificationsTab> {
-  bool _allRead = false;
+class _SihamaNotificationItem {
+  const _SihamaNotificationItem({
+    required this.icon,
+    required this.title,
+    required this.message,
+    required this.date,
+    this.onTap,
+  });
 
+  final IconData icon;
+  final String title;
+  final String message;
+  final String date;
+  final VoidCallback? onTap;
+}
+
+class _NotificationsTabState extends State<_NotificationsTab> {
   @override
   Widget build(BuildContext context) {
-    final reporterOrders = widget.orders
-        .where((order) => order.customerName == widget.customerName)
-        .toList();
+    final reporterOrders = widget.orders;
     final trackedOrder = reporterOrders.isEmpty ? null : reporterOrders.first;
     final pendingOrders = widget.orders
         .where((order) => order.status == 'Dipesan')
         .toList();
     final notices = switch (widget.role) {
-      SihamaRole.pelapor => [
-        (
-          Icons.description_outlined,
-          'Laporan L-1042 selesai ditinjau',
-          'Penyuluh memberikan diagnosis Hawar Daun Bakteri. Lihat rekomendasi obat.',
-          '2 jam lalu',
-          true,
-        ),
-        (
-          Icons.shopping_bag_outlined,
-          trackedOrder == null
-              ? 'Belum ada pesanan'
-              : 'Pesanan ${trackedOrder.id} ${trackedOrder.status.toLowerCase()}',
-          trackedOrder == null
-              ? 'Pesanan yang dibuat di AgriMarket akan muncul di sini.'
-              : 'Status pesanan Anda sekarang ${trackedOrder.status.toLowerCase()}.',
-          trackedOrder == null ? '—' : _formatDate(trackedOrder.date),
-          false,
-        ),
-        (
-          Icons.chat_bubble_outline_rounded,
-          'Pesan baru dari Ir. Siti Rahmawati',
-          'Bercak terlihat sudah tidak melebar. Lanjutkan jadwal semprot...',
-          '1 jam lalu',
-          true,
-        ),
-      ],
-      SihamaRole.penyuluh => const [
-        (
-          Icons.assignment_outlined,
-          'Laporan baru masuk',
-          'Ada laporan gejala tanaman baru yang menunggu pemeriksaan.',
-          'Hari ini',
-          true,
-        ),
-        (
-          Icons.chat_bubble_outline_rounded,
-          'Pesan dari petani',
-          'Petani mengirimkan informasi tambahan pada laporan.',
-          'Kemarin',
-          false,
-        ),
-      ],
-      SihamaRole.mitraToko => [
-        (
-          Icons.shopping_bag_outlined,
-          pendingOrders.isEmpty
-              ? 'Tidak ada pesanan baru'
-              : 'Pesanan ${pendingOrders.first.id} perlu diproses',
-          pendingOrders.isEmpty
-              ? 'Pesanan baru akan muncul di sini.'
-              : 'Pembayaran diterima dari ${pendingOrders.first.customerName}. Segera proses pesanan.',
-          pendingOrders.isEmpty
-              ? 'Hari ini'
-              : _formatDate(pendingOrders.first.date),
-          pendingOrders.isNotEmpty,
-        ),
-        (
-          Icons.inventory_2_outlined,
-          'Stok produk menipis',
-          'Periksa kembali jumlah stok produk yang tersedia.',
-          'Kemarin',
-          false,
-        ),
-      ],
+      SihamaRole.pelapor =>
+        widget.reports
+            .map(
+              (report) => _SihamaNotificationItem(
+                icon: Icons.description_outlined,
+                title: report.status == 'Selesai Ditinjau'
+                    ? 'Laporan ${report.id} selesai ditinjau'
+                    : 'Status laporan ${report.id}: ${report.status}',
+                message: report.diagnosis?.trim().isNotEmpty == true
+                    ? 'Diagnosis: ${report.diagnosis}'
+                    : report.recommendation?.trim().isNotEmpty == true
+                    ? 'Rekomendasi: ${report.recommendation}'
+                    : report.description,
+                date: _formatDate(report.date),
+                onTap: () => widget.onOpenReport(report),
+              ),
+            )
+            .toList(),
+      SihamaRole.penyuluh =>
+        widget.reports
+            .where((report) => report.status != 'Selesai Ditinjau')
+            .map(
+              (report) => _SihamaNotificationItem(
+                icon: Icons.assignment_outlined,
+                title: 'Laporan ${report.id} menunggu peninjauan',
+                message: '${report.crop} · ${report.location}',
+                date: _formatDate(report.date),
+                onTap: () => widget.onOpenReport(report),
+              ),
+            )
+            .toList(),
+      SihamaRole.mitraToko =>
+        pendingOrders
+            .map(
+              (order) => _SihamaNotificationItem(
+                icon: Icons.shopping_bag_outlined,
+                title: 'Pesanan ${order.id} perlu diproses',
+                message:
+                    'Pesanan dari ${order.customerName} menunggu diproses.',
+                date: _formatDate(order.date),
+                onTap: () => widget.onOpenOrder(order),
+              ),
+            )
+            .toList(),
     };
 
     return ListView(
@@ -4368,15 +4363,6 @@ class _NotificationsTabState extends State<_NotificationsTab> {
                   fontSize: 20,
                   fontWeight: FontWeight.w800,
                 ),
-              ),
-            ),
-            TextButton.icon(
-              onPressed: () => setState(() => _allRead = true),
-              icon: const Icon(Icons.done_all_rounded, size: 15),
-              label: Text(_allRead ? 'Sudah dibaca' : 'Tandai dibaca'),
-              style: TextButton.styleFrom(
-                foregroundColor: const Color(0xFF25833E),
-                textStyle: const TextStyle(fontSize: 11),
               ),
             ),
           ],
@@ -4396,7 +4382,7 @@ class _NotificationsTabState extends State<_NotificationsTab> {
             const _EmptyState(
               icon: Icons.shopping_bag_outlined,
               title: 'Belum ada pesanan',
-              message: 'Pesanan AgriMarket akan tercatat di bagian ini.',
+              message: 'Pesanan Anda akan tercatat di bagian ini.',
             )
           else
             GestureDetector(
@@ -4444,111 +4430,83 @@ class _NotificationsTabState extends State<_NotificationsTab> {
                 ),
               ),
             ),
-          const SizedBox(height: 12),
-          const Text(
-            'Pemberitahuan',
-            style: TextStyle(
-              color: _ink,
-              fontSize: 14,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 8),
         ],
-        ...notices.map((notice) {
-          final unread = notice.$5 && !_allRead;
-          return InkWell(
-            borderRadius: BorderRadius.circular(14),
-            onTap: () {
-              setState(() => _allRead = true);
-              if (notice.$1 == Icons.description_outlined &&
-                  widget.role == SihamaRole.pelapor) {
-                final report = widget.reports.cast<CropReport?>().firstWhere(
-                  (item) => item?.status == 'Selesai Ditinjau',
-                  orElse: () =>
-                      widget.reports.isEmpty ? null : widget.reports.first,
-                );
-                if (report != null) widget.onOpenReport(report);
-              } else if (notice.$1 == Icons.shopping_bag_outlined) {
-                final order = widget.role == SihamaRole.mitraToko
-                    ? (pendingOrders.isEmpty ? null : pendingOrders.first)
-                    : trackedOrder ??
-                          (pendingOrders.isEmpty ? null : pendingOrders.first);
-                if (order != null) widget.onOpenOrder(order);
-              } else if (notice.$1 == Icons.chat_bubble_outline_rounded) {
-                widget.onOpenChat();
-              }
-            },
-            child: Container(
-              margin: const EdgeInsets.only(bottom: 10),
-              padding: const EdgeInsets.all(11),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: unread
-                      ? const Color(0xFF85C991)
-                      : const Color(0xFFE5ECE6),
+        const SizedBox(height: 10),
+        const Text(
+          'Pemberitahuan',
+          style: TextStyle(
+            color: _ink,
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 8),
+        if (notices.isEmpty)
+          const _EmptyState(
+            icon: Icons.notifications_none_rounded,
+            title: 'Belum ada notifikasi',
+            message: 'Pembaruan akan muncul di sini saat ada aktivitas.',
+          )
+        else
+          ...notices.map(
+            (notice) => InkWell(
+              borderRadius: BorderRadius.circular(14),
+              onTap: notice.onTap,
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(11),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFE5ECE6)),
                 ),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 34,
-                    height: 34,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFE2F3E6),
-                      shape: BoxShape.circle,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 34,
+                      height: 34,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFE2F3E6),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(notice.icon, color: _green, size: 17),
                     ),
-                    child: Icon(notice.$1, color: _green, size: 17),
-                  ),
-                  const SizedBox(width: 9),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          notice.$2,
-                          style: const TextStyle(
-                            color: _ink,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            notice.title,
+                            style: const TextStyle(
+                              color: _ink,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          notice.$3,
-                          style: const TextStyle(
-                            color: _muted,
-                            fontSize: 10,
-                            height: 1.3,
+                          const SizedBox(height: 3),
+                          Text(
+                            notice.message,
+                            style: const TextStyle(
+                              color: _muted,
+                              fontSize: 10,
+                              height: 1.3,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          notice.$4,
-                          style: const TextStyle(color: _muted, fontSize: 9),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (unread) ...[
-                    const SizedBox(width: 6),
-                    const Padding(
-                      padding: EdgeInsets.only(top: 5),
-                      child: Icon(
-                        Icons.circle,
-                        color: Color(0xFF25833E),
-                        size: 8,
+                          const SizedBox(height: 4),
+                          Text(
+                            notice.date,
+                            style: const TextStyle(color: _muted, fontSize: 9),
+                          ),
+                        ],
                       ),
                     ),
                   ],
-                ],
+                ),
               ),
             ),
-          );
-        }),
+          ),
       ],
     );
   }
@@ -5108,9 +5066,14 @@ IconData _diagnosisCategoryIcon(String category) => switch (category) {
 };
 
 class _ShopOrdersTab extends StatefulWidget {
-  const _ShopOrdersTab({required this.orders, required this.onUpdateOrder});
+  const _ShopOrdersTab({
+    required this.orders,
+    required this.shopName,
+    required this.onUpdateOrder,
+  });
 
   final List<MarketOrder> orders;
+  final String shopName;
   final Future<bool> Function(MarketOrder order, String status) onUpdateOrder;
 
   @override
@@ -5138,9 +5101,9 @@ class _ShopOrdersTabState extends State<_ShopOrdersTab> {
             fontWeight: FontWeight.w800,
           ),
         ),
-        const Text(
-          'Toko Tani Makmur',
-          style: TextStyle(color: _muted, fontSize: 10),
+        Text(
+          'Pesanan untuk ${widget.shopName}',
+          style: const TextStyle(color: _muted, fontSize: 10),
         ),
         const SizedBox(height: 12),
         SingleChildScrollView(
@@ -5648,6 +5611,8 @@ class _ProfileTab extends StatelessWidget {
   const _ProfileTab({
     required this.profile,
     required this.role,
+    required this.userName,
+    required this.userEmail,
     required this.onEdit,
     required this.onDelete,
     required this.onLogout,
@@ -5657,9 +5622,11 @@ class _ProfileTab extends StatelessWidget {
 
   final FarmerProfile? profile;
   final SihamaRole role;
+  final String userName;
+  final String? userEmail;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
-  final VoidCallback? onLogout;
+  final Future<void> Function()? onLogout;
   final int reportCount;
   final int orderCount;
 
@@ -5669,17 +5636,14 @@ class _ProfileTab extends StatelessWidget {
     final details =
         profile ??
         FarmerProfile(
-          name: 'Siti Rahmawati',
+          name: userName,
           role: role.label,
-          region: 'Kabupaten Bogor',
+          region: '',
           phone: '',
           address: '',
         );
-    final displayName = switch (role) {
-      SihamaRole.pelapor => details.name,
-      SihamaRole.penyuluh => 'Siti Rahmawati',
-      SihamaRole.mitraToko => 'Toko Tani Makmur',
-    };
+    final displayName = details.name.trim().isEmpty ? userName : details.name;
+    final email = userEmail?.trim();
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 22, 18, 28),
@@ -5690,7 +5654,77 @@ class _ProfileTab extends StatelessWidget {
           subtitle: 'Informasi akun dan preferensi aplikasi.',
         ),
         const SizedBox(height: 18),
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: _forest,
+            borderRadius: BorderRadius.circular(22),
+          ),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 28,
+                backgroundColor: const Color(0xFFBEE2D2),
+                child: Text(
+                  _initials(displayName),
+                  style: const TextStyle(
+                    color: _forest,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      displayName,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      isReporter ? 'Pelapor (Petani)' : role.label,
+                      style: const TextStyle(color: Color(0xFFD4E5DA)),
+                    ),
+                  ],
+                ),
+              ),
+              if (isReporter)
+                IconButton(
+                  onPressed: onEdit,
+                  tooltip: 'Edit profil',
+                  icon: const Icon(Icons.edit_outlined, color: Colors.white),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 22),
+        Row(
+          children: [
+            Expanded(
+              child: _ProfileStat(
+                label: 'Laporan',
+                value: '$reportCount',
+                icon: Icons.assignment_outlined,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _ProfileStat(
+                label: 'Pesanan',
+                value: '$orderCount',
+                icon: Icons.shopping_bag_outlined,
+              ),
+            ),
+          ],
+        ),
         if (profile == null && isReporter) ...[
+          const SizedBox(height: 18),
           const _EmptyState(
             icon: Icons.person_outline_rounded,
             title: 'Profil belum dibuat',
@@ -5701,114 +5735,38 @@ class _ProfileTab extends StatelessWidget {
             icon: const Icon(Icons.person_add_alt_1_rounded),
             label: const Text('Buat profil'),
           ),
-        ] else ...[
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: _forest,
-              borderRadius: BorderRadius.circular(22),
-            ),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 28,
-                  backgroundColor: const Color(0xFFBEE2D2),
-                  child: Text(
-                    _initials(displayName),
-                    style: const TextStyle(
-                      color: _forest,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        displayName,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        isReporter
-                            ? 'Pelapor (Petani)'
-                            : role == SihamaRole.penyuluh
-                            ? 'Penyuluh - ${details.region}'
-                            : 'Mitra Toko',
-                        style: const TextStyle(color: Color(0xFFD4E5DA)),
-                      ),
-                    ],
-                  ),
-                ),
-                if (isReporter)
-                  IconButton(
-                    onPressed: onEdit,
-                    tooltip: 'Edit profil',
-                    icon: const Icon(Icons.edit_outlined, color: Colors.white),
-                  ),
-              ],
-            ),
+        ],
+        const SizedBox(height: 20),
+        const Text(
+          'Informasi akun',
+          style: TextStyle(
+            color: _ink,
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
           ),
-          const SizedBox(height: 22),
-          Row(
-            children: [
-              Expanded(
-                child: _ProfileStat(
-                  label: 'Laporan',
-                  value: '$reportCount',
-                  icon: Icons.assignment_outlined,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _ProfileStat(
-                  label: 'Pesanan',
-                  value: '$orderCount',
-                  icon: Icons.shopping_bag_outlined,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          const Text(
-            'Informasi akun',
-            style: TextStyle(
-              color: _ink,
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 8),
+        ),
+        const SizedBox(height: 8),
+        _ProfileMenuTile(
+          icon: Icons.mail_outline_rounded,
+          title: 'Email',
+          subtitle: email == null || email.isEmpty
+              ? 'Email tidak tersedia'
+              : email,
+          onTap: null,
+        ),
+        if (isReporter) ...[
           _ProfileMenuTile(
-            icon: Icons.mail_outline_rounded,
-            title: 'Email',
-            subtitle: role.demoEmail,
-            onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Email demo terverifikasi.')),
-            ),
+            icon: Icons.phone_outlined,
+            title: 'Nomor telepon',
+            subtitle: details.phone.isEmpty ? 'Belum diisi' : details.phone,
+            onTap: onEdit,
           ),
-          if (isReporter) ...[
-            _ProfileMenuTile(
-              icon: Icons.phone_outlined,
-              title: 'Nomor telepon',
-              subtitle: details.phone.isEmpty ? 'Belum diisi' : details.phone,
-              onTap: onEdit,
-            ),
-            _ProfileMenuTile(
-              icon: Icons.location_on_outlined,
-              title: 'Alamat',
-              subtitle: details.address.isEmpty
-                  ? 'Belum diisi'
-                  : details.address,
-              onTap: onEdit,
-            ),
-          ],
+          _ProfileMenuTile(
+            icon: Icons.location_on_outlined,
+            title: 'Alamat',
+            subtitle: details.address.isEmpty ? 'Belum diisi' : details.address,
+            onTap: onEdit,
+          ),
         ],
         const SizedBox(height: 22),
         const Text(
@@ -5872,7 +5830,7 @@ class _ProfileTab extends StatelessWidget {
                     builder: (context) => AlertDialog(
                       title: const Text('Keluar dari akun?'),
                       content: const Text(
-                        'Anda dapat masuk kembali menggunakan akun demo.',
+                        'Anda dapat masuk kembali menggunakan email dan kata sandi akun.',
                       ),
                       actions: [
                         TextButton(
@@ -5886,7 +5844,19 @@ class _ProfileTab extends StatelessWidget {
                       ],
                     ),
                   );
-                  if (shouldLogout == true) onLogout!();
+                  if (shouldLogout == true) {
+                    try {
+                      await onLogout!();
+                    } catch (error) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Gagal keluar dari akun: $error'),
+                          ),
+                        );
+                      }
+                    }
+                  }
                 },
           style: OutlinedButton.styleFrom(
             foregroundColor: const Color(0xFF9B4038),
@@ -5899,8 +5869,6 @@ class _ProfileTab extends StatelessWidget {
           icon: const Icon(Icons.logout_rounded),
           label: const Text('Keluar dari akun'),
         ),
-        const SizedBox(height: 18),
-        const _PrototypeNote(),
       ],
     );
   }
@@ -6467,7 +6435,7 @@ class _ProfileMenuTile extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -6491,7 +6459,9 @@ class _ProfileMenuTile extends StatelessWidget {
         subtitle,
         style: const TextStyle(color: _muted, fontSize: 12),
       ),
-      trailing: const Icon(Icons.chevron_right_rounded, color: _muted),
+      trailing: onTap == null
+          ? null
+          : const Icon(Icons.chevron_right_rounded, color: _muted),
       onTap: onTap,
     );
   }
@@ -6629,26 +6599,6 @@ class _CategoryChip extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _PrototypeNote extends StatelessWidget {
-  const _PrototypeNote();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Row(
-      children: [
-        Icon(Icons.info_outline_rounded, size: 15, color: _muted),
-        SizedBox(width: 7),
-        Expanded(
-          child: Text(
-            'Data pada prototipe ini adalah contoh fiktif.',
-            style: TextStyle(color: _muted, fontSize: 12),
-          ),
-        ),
-      ],
     );
   }
 }

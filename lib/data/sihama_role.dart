@@ -7,4 +7,17 @@ enum SihamaRole {
 
   final String label;
   final String demoEmail;
+
+  String get accessRole => switch (this) {
+    SihamaRole.pelapor => 'pelapor',
+    SihamaRole.penyuluh => 'penyuluh',
+    SihamaRole.mitraToko => 'mitra_toko',
+  };
+
+  static SihamaRole fromAccessRole(String value) => switch (value) {
+    'pelapor' => SihamaRole.pelapor,
+    'penyuluh' => SihamaRole.penyuluh,
+    'mitra_toko' => SihamaRole.mitraToko,
+    _ => throw FormatException('Peran SIHAMA tidak dikenal: $value'),
+  };
 }
