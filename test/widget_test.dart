@@ -417,22 +417,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Budi Santoso'), findsOneWidget);
 
-    await tester.scrollUntilVisible(
-      find.text('Hapus akun'),
-      200,
-      scrollable: find.byType(Scrollable).last,
-    );
-    await tester.tap(find.text('Hapus akun'));
+    await tester.drag(find.byType(ListView).first, const Offset(0, -350));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Hapus profil'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Hapus'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Ya, hapus akun'));
+    await tester.drag(find.byType(ListView).first, const Offset(0, 500));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.text('Profil belum dibuat'),
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
     expect(find.text('Profil belum dibuat'), findsOneWidget);
 
     await tester.ensureVisible(find.text('Buat profil'));
@@ -489,6 +481,7 @@ void main() {
       expect(find.text('Ir. Siti Rahmawati'), findsNothing);
       expect(find.text('Stok produk menipis'), findsNothing);
       expect(find.text('Tandai dibaca'), findsNothing);
+      expect(find.text('2'), findsNothing);
       if (role == SihamaRole.mitraToko) {
         expect(find.text('Pesanan P-AKTUAL perlu diproses'), findsOneWidget);
       }

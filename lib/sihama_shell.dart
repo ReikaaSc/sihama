@@ -964,48 +964,13 @@ class _BottomNavigation extends StatelessWidget {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          if (item.label == 'Notifikasi')
-                            Stack(
-                              clipBehavior: Clip.none,
-                              children: [
-                                Icon(
-                                  item.icon,
-                                  size: 21,
-                                  color: selected
-                                      ? _green
-                                      : const Color(0xFF6F7D74),
-                                ),
-                                Positioned(
-                                  right: -7,
-                                  top: -5,
-                                  child: Container(
-                                    width: 14,
-                                    height: 14,
-                                    alignment: Alignment.center,
-                                    decoration: const BoxDecoration(
-                                      color: Color(0xFFC62828),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Text(
-                                      '2',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            )
-                          else
-                            Icon(
-                              item.icon,
-                              size: 21,
-                              color: selected
-                                  ? _green
-                                  : const Color(0xFF6F7D74),
-                            ),
+                          Icon(
+                            item.icon,
+                            size: 21,
+                            color: selected
+                                ? _green
+                                : const Color(0xFF6F7D74),
+                          ),
                           const SizedBox(height: 3),
                           Text(
                             item.label,
