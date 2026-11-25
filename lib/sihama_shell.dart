@@ -121,7 +121,11 @@ class _SihamaShellState extends State<SihamaShell> {
                           color: const Color(0xFFDCEDE4),
                           borderRadius: BorderRadius.circular(24),
                         ),
-                        child: const Icon(Icons.eco_rounded, size: 38, color: _green),
+                        child: const Icon(
+                          Icons.eco_rounded,
+                          size: 38,
+                          color: _green,
+                        ),
                       ),
                       const SizedBox(height: 20),
                       const SizedBox(
@@ -132,10 +136,17 @@ class _SihamaShellState extends State<SihamaShell> {
                       const SizedBox(height: 14),
                       const Text(
                         'Menyiapkan akun Anda',
-                        style: TextStyle(color: _ink, fontSize: 16, fontWeight: FontWeight.w700),
+                        style: TextStyle(
+                          color: _ink,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                       const SizedBox(height: 5),
-                      const Text('Memuat data dan percakapan?', style: TextStyle(color: _muted, fontSize: 12)),
+                      const Text(
+                        'Memuat data dan percakapan?',
+                        style: TextStyle(color: _muted, fontSize: 12),
+                      ),
                     ],
                   )
                 : Padding(
@@ -143,16 +154,31 @@ class _SihamaShellState extends State<SihamaShell> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.storage_rounded, size: 40, color: _green),
+                        const Icon(
+                          Icons.storage_rounded,
+                          size: 40,
+                          color: _green,
+                        ),
                         const SizedBox(height: 12),
                         const Text(
                           'Data gagal dimuat.',
-                          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: _ink),
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                            color: _ink,
+                          ),
                         ),
                         const SizedBox(height: 8),
-                        Text('$_loadError', textAlign: TextAlign.center, style: const TextStyle(color: _muted)),
+                        Text(
+                          '$_loadError',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: _muted),
+                        ),
                         const SizedBox(height: 16),
-                        FilledButton(onPressed: _loadData, child: const Text('Coba lagi')),
+                        FilledButton(
+                          onPressed: _loadData,
+                          child: const Text('Coba lagi'),
+                        ),
                       ],
                     ),
                   ),
@@ -164,6 +190,9 @@ class _SihamaShellState extends State<SihamaShell> {
     final reviewedReports = _reports
         .where((report) => report.status == 'Selesai Ditinjau')
         .toList();
+    final recommendedProducts = reviewedReports.isEmpty
+        ? const <MarketProduct>[]
+        : _recommendedProducts(reviewedReports.first, _products);
     final pages = <Widget>[
       if (widget.role == SihamaRole.pelapor)
         _HomeTab(
@@ -188,6 +217,7 @@ class _SihamaShellState extends State<SihamaShell> {
         _showReportForm
             ? _ReportTab(
                 imagePicker: widget.imagePicker ?? pickReportImage,
+                repository: _repository,
                 onCancel: () => setState(() => _showReportForm = false),
                 onSubmit: (report) async {
                   final saved = await _runMutation(
@@ -219,12 +249,15 @@ class _SihamaShellState extends State<SihamaShell> {
           onEdit: _editReport,
           onDelete: _deleteReport,
         ),
-      if (widget.role == SihamaRole.penyuluh) const _DiseaseDatabaseTab(),
+      if (widget.role == SihamaRole.penyuluh)
+        _DiseaseDatabaseTab(repository: _repository),
       if (widget.role == SihamaRole.mitraToko)
         _ShopOrdersTab(orders: _orders, onUpdateOrder: _updateOrder),
       if (widget.role != SihamaRole.penyuluh)
         _MarketTab(
           products: _products,
+          recommendedProducts: recommendedProducts,
+          profile: _profile,
           canOrder: _hasReviewedReport,
           canManage: widget.role == SihamaRole.mitraToko,
           imagePicker: widget.imagePicker ?? pickReportImage,
@@ -241,9 +274,8 @@ class _SihamaShellState extends State<SihamaShell> {
         customerName: _profile?.name ?? 'Petani SIHAMA',
         onOpenReport: (report) => _showReportDetails(context, report),
         onOpenOrder: (order) => _showOrderDetails(context, order),
-        onOpenChat: () => _openConversation(
-          _reports.isEmpty ? null : _reports.first,
-        ),
+        onOpenChat: () =>
+            _openConversation(_reports.isEmpty ? null : _reports.first),
       ),
       _ProfileTab(
         profile: _profile,
@@ -265,9 +297,8 @@ class _SihamaShellState extends State<SihamaShell> {
       pages[0] = _ConversationTab(
         onBack: () => setState(() => _showConversations = false),
         report: _reports.isEmpty ? null : _reports.first,
-        onOpenChat: () => _openConversation(
-          _reports.isEmpty ? null : _reports.first,
-        ),
+        onOpenChat: () =>
+            _openConversation(_reports.isEmpty ? null : _reports.first),
       );
     }
 
@@ -300,6 +331,7 @@ class _SihamaShellState extends State<SihamaShell> {
           builder: (_) => _AdviserReportScreen(
             report: report,
             products: _products,
+            repository: _repository,
             onOpenChat: () => _openConversation(report),
             onSave: (updated) => _runMutation(
               'Diagnosis laporan ${report.id} berhasil disimpan.',
@@ -383,7 +415,14 @@ class _SihamaShellState extends State<SihamaShell> {
                   children: [
                     _SymptomChips(description: report.description),
                     const SizedBox(height: 8),
-                    Text(report.description, style: const TextStyle(color: _muted, height: 1.4, fontSize: 12)),
+                    Text(
+                      report.description,
+                      style: const TextStyle(
+                        color: _muted,
+                        height: 1.4,
+                        fontSize: 12,
+                      ),
+                    ),
                     const SizedBox(height: 9),
                     _InsightBanner(
                       text: report.diagnosis == null
@@ -398,7 +437,9 @@ class _SihamaShellState extends State<SihamaShell> {
                             ? null
                             : () {
                                 Navigator.pop(context);
-                                WidgetsBinding.instance.addPostFrameCallback((_) {
+                                WidgetsBinding.instance.addPostFrameCallback((
+                                  _,
+                                ) {
                                   if (mounted) _editReport(report);
                                 });
                               },
@@ -442,9 +483,34 @@ class _SihamaShellState extends State<SihamaShell> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(children: [const Icon(Icons.medical_services_outlined, color: _green, size: 18), const SizedBox(width: 7), Expanded(child: Text(report.diagnosis ?? 'Diagnosis belum tersedia', style: const TextStyle(color: _ink, fontWeight: FontWeight.w700)))]),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.medical_services_outlined,
+                            color: _green,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 7),
+                          Expanded(
+                            child: Text(
+                              report.diagnosis ?? 'Diagnosis belum tersedia',
+                              style: const TextStyle(
+                                color: _ink,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                       const SizedBox(height: 8),
-                      Text(report.recommendation ?? 'Ikuti arahan petugas dan pantau kondisi tanaman secara berkala.', style: const TextStyle(color: _muted, height: 1.4, fontSize: 12)),
+                      Text(
+                        report.recommendation ?? 'Ikuti arahan petugas dan pantau kondisi tanaman secara berkala.',
+                        style: const TextStyle(
+                          color: _muted,
+                          height: 1.4,
+                          fontSize: 12,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -459,23 +525,77 @@ class _SihamaShellState extends State<SihamaShell> {
                             padding: EdgeInsets.only(bottom: 10),
                             child: Align(
                               alignment: Alignment.centerLeft,
-                              child: Text('Belum ada obat tersedia di AgriMarket.', style: TextStyle(color: _muted, fontSize: 11)),
+                              child: Text(
+                                'Belum ada obat tersedia di AgriMarket.',
+                                style: TextStyle(color: _muted, fontSize: 11),
+                              ),
                             ),
                           ),
-                        ...recommendedProducts.map((product) => Padding(
-                          padding: const EdgeInsets.only(bottom: 9),
-                          child: Row(children: [
-                            Container(width: 38, height: 38, decoration: BoxDecoration(color: const Color(0xFFDDF0D8), borderRadius: BorderRadius.circular(10)), child: Icon(_productIcon(product.category), color: _green, size: 20)),
-                            const SizedBox(width: 9),
-                            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(product.name, style: const TextStyle(color: _ink, fontWeight: FontWeight.w700, fontSize: 12)), Text(product.category, style: const TextStyle(color: _muted, fontSize: 10))])),
-                            Text(_formatPrice(product.price), style: const TextStyle(color: _green, fontWeight: FontWeight.w800, fontSize: 11)),
-                          ]),
-                        )),
-                        SizedBox(width: double.infinity, child: FilledButton.icon(
-                          onPressed: () { Navigator.pop(context); setState(() => _selectedIndex = 2); },
-                          icon: const Icon(Icons.shopping_bag_outlined),
-                          label: const Text('Lihat Obat & Pesan'),
-                        )),
+                        ...recommendedProducts.map(
+                          (product) => Padding(
+                            padding: const EdgeInsets.only(bottom: 9),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 38,
+                                  height: 38,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFDDF0D8),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Icon(
+                                    _productIcon(product.category),
+                                    color: _green,
+                                    size: 20,
+                                  ),
+                                ),
+                                const SizedBox(width: 9),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        product.name,
+                                        style: const TextStyle(
+                                          color: _ink,
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      Text(
+                                        product.category,
+                                        style: const TextStyle(
+                                          color: _muted,
+                                          fontSize: 10,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Text(
+                                  _formatPrice(product.price),
+                                  style: const TextStyle(
+                                    color: _green,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            onPressed: () {
+                              Navigator.pop(context);
+                              setState(() => _selectedIndex = 2);
+                            },
+                            icon: const Icon(Icons.shopping_bag_outlined),
+                            label: const Text('Lihat Obat & Pesan'),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -501,7 +621,8 @@ class _SihamaShellState extends State<SihamaShell> {
   }
 
   void _openConversation([CropReport? report]) {
-    final conversationReport = report ?? (_reports.isEmpty ? null : _reports.first);
+    final conversationReport =
+        report ?? (_reports.isEmpty ? null : _reports.first);
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => _ChatScreen(
@@ -554,36 +675,46 @@ class _SihamaShellState extends State<SihamaShell> {
     }
   }
 
-  Future<bool> _checkoutOrder(
+  Future<MarketOrder?> _checkoutOrder(
     List<MarketOrderItem> items,
     ReportImage paymentProof,
+    {
+      required String customerName,
+      required String customerPhone,
+      required String deliveryAddress,
+    }
   ) async {
     final now = DateTime.now();
     final order = MarketOrder(
       id: 'P-${now.microsecondsSinceEpoch}',
-      customerName: _profile?.name ?? 'Petani SIHAMA',
+      customerName: customerName,
       date: now,
       status: 'Dipesan',
       items: items,
+      customerPhone: customerPhone,
+      deliveryAddress: deliveryAddress,
       transferProofBytes: paymentProof.bytes,
     );
-    return _runMutation(
+    final saved = await _runMutation(
       'Pesanan ${order.id} berhasil dibuat.',
       () => _repository.createOrder(order),
     );
+    return saved ? order : null;
   }
 
   Future<bool> _changeProductStock(MarketProduct product, int stock) {
     return _runMutation('Stok ${product.name} diperbarui.', () {
-      return _repository.updateProduct(MarketProduct(
-        id: product.id,
-        name: product.name,
-        category: product.category,
-        price: product.price,
-        stock: stock,
-        description: product.description,
-        photoBytes: product.photoBytes,
-      ));
+      return _repository.updateProduct(
+        MarketProduct(
+          id: product.id,
+          name: product.name,
+          category: product.category,
+          price: product.price,
+          stock: stock,
+          description: product.description,
+          photoBytes: product.photoBytes,
+        ),
+      );
     });
   }
 
@@ -654,10 +785,15 @@ class _SihamaShellState extends State<SihamaShell> {
           'Akun dan profil lokal akan dihapus. Tindakan ini tidak dapat dibatalkan. Lanjutkan?',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Batal')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Batal'),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: const Color(0xFF9B4038)),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF9B4038),
+            ),
             child: const Text('Ya, hapus akun'),
           ),
         ],
@@ -891,9 +1027,9 @@ class _HomeTab extends StatelessWidget {
           clipBehavior: Clip.none,
           alignment: Alignment.bottomCenter,
           children: [
-            const SizedBox(height: 190),
+            const SizedBox(height: 200),
             Container(
-              height: 166,
+              height: 176,
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(18, 14, 18, 48),
               decoration: const BoxDecoration(
@@ -1454,7 +1590,8 @@ class _ChatScreenState extends State<_ChatScreen> {
 
   bool get _isMine => widget.role == SihamaRole.pelapor;
   String get _myName => _isMine ? widget.reporterName : 'Ir. Siti Rahmawati';
-  String get _partnerName => _isMine ? 'Ir. Siti Rahmawati' : widget.reporterName;
+  String get _partnerName =>
+      _isMine ? 'Ir. Siti Rahmawati' : widget.reporterName;
 
   @override
   void initState() {
@@ -1473,19 +1610,27 @@ class _ChatScreenState extends State<_ChatScreen> {
     if (value.isEmpty) return;
     _controller.clear();
     try {
-      await widget.repository.addChatMessage(ChatMessage(
-        reportId: widget.reportId,
-        senderRole: widget.role.name,
-        senderName: _myName,
-        text: value,
-        sentAt: DateTime.now(),
-      ));
+      await widget.repository.addChatMessage(
+        ChatMessage(
+          reportId: widget.reportId,
+          senderRole: widget.role.name,
+          senderName: _myName,
+          text: value,
+          sentAt: DateTime.now(),
+        ),
+      );
       if (!mounted) return;
-      setState(() => _messagesFuture = widget.repository.getChatMessages(widget.reportId));
+      setState(
+        () => _messagesFuture = widget.repository.getChatMessages(
+          widget.reportId,
+        ),
+      );
     } catch (error) {
       if (!mounted) return;
       _controller.text = value;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Pesan gagal disimpan: $error')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Pesan gagal disimpan: $error')));
     }
   }
 
@@ -1503,7 +1648,10 @@ class _ChatScreenState extends State<_ChatScreen> {
             CircleAvatar(
               radius: 16,
               backgroundColor: Color(0xFFD8F0D5),
-              child: Text(_initials(_partnerName), style: const TextStyle(color: _green, fontSize: 11)),
+              child: Text(
+                _initials(_partnerName),
+                style: const TextStyle(color: _green, fontSize: 11),
+              ),
             ),
             const SizedBox(width: 10),
             Column(
@@ -1511,7 +1659,10 @@ class _ChatScreenState extends State<_ChatScreen> {
               children: [
                 Text(
                   _partnerName,
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
                 Text(
                   '●  Sesi aktif',
@@ -1578,44 +1729,72 @@ class _ChatScreenState extends State<_ChatScreen> {
                     if (messages.isNotEmpty)
                       const Center(
                         child: Chip(
-                          label: Text('Riwayat percakapan', style: TextStyle(fontSize: 10)),
+                          label: Text(
+                            'Riwayat percakapan',
+                            style: TextStyle(fontSize: 10),
+                          ),
                         ),
                       ),
                     ...messages.map((message) {
                       final mine = message.senderRole == widget.role.name;
                       return Align(
-                        alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+                        alignment: mine
+                            ? Alignment.centerRight
+                            : Alignment.centerLeft,
                         child: Container(
                           margin: const EdgeInsets.only(bottom: 8),
                           padding: const EdgeInsets.all(12),
                           constraints: const BoxConstraints(maxWidth: 280),
                           decoration: BoxDecoration(
-                            color: mine ? const Color(0xFF25833E) : Colors.white,
+                            color: mine
+                                ? const Color(0xFF25833E)
+                                : Colors.white,
                             borderRadius: BorderRadius.circular(14),
                           ),
                           child: Column(
-                            crossAxisAlignment: mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                            crossAxisAlignment: mine
+                                ? CrossAxisAlignment.end
+                                : CrossAxisAlignment.start,
                             children: [
                               if (!mine)
-                                Text(message.senderName, style: const TextStyle(color: _green, fontSize: 9, fontWeight: FontWeight.w700)),
+                                Text(
+                                  message.senderName,
+                                  style: const TextStyle(
+                                    color: _green,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
                               Text(
                                 message.text,
-                                style: TextStyle(color: mine ? Colors.white : _ink, height: 1.4, fontSize: 12),
+                                style: TextStyle(
+                                  color: mine ? Colors.white : _ink,
+                                  height: 1.4,
+                                  fontSize: 12,
+                                ),
                               ),
                               const SizedBox(height: 3),
                               Text(
                                 '${message.sentAt.hour.toString().padLeft(2, '0')}.${message.sentAt.minute.toString().padLeft(2, '0')}',
-                                style: TextStyle(color: mine ? Colors.white70 : _muted, fontSize: 9),
+                                style: TextStyle(
+                                  color: mine ? Colors.white70 : _muted,
+                                  fontSize: 9,
+                                ),
                               ),
                             ],
                           ),
                         ),
                       );
                     }),
-                    if (snapshot.connectionState == ConnectionState.done && messages.isEmpty)
+                    if (snapshot.connectionState == ConnectionState.done &&
+                        messages.isEmpty)
                       const Padding(
                         padding: EdgeInsets.all(22),
-                        child: Text('Belum ada pesan. Mulai percakapan dengan mengirim pesan.', textAlign: TextAlign.center, style: TextStyle(color: _muted, fontSize: 12)),
+                        child: Text(
+                          'Belum ada pesan. Mulai percakapan dengan mengirim pesan.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: _muted, fontSize: 12),
+                        ),
                       ),
                   ],
                 );
@@ -1713,13 +1892,15 @@ class _SymptomChips extends StatelessWidget {
       spacing: 6,
       runSpacing: 6,
       children: symptoms
-          .map((symptom) => Chip(
-                label: Text(symptom, style: const TextStyle(fontSize: 10)),
-                visualDensity: VisualDensity.compact,
-                backgroundColor: const Color(0xFFF0F5F1),
-                side: BorderSide.none,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ))
+          .map(
+            (symptom) => Chip(
+              label: Text(symptom, style: const TextStyle(fontSize: 10)),
+              visualDensity: VisualDensity.compact,
+              backgroundColor: const Color(0xFFF0F5F1),
+              side: BorderSide.none,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          )
           .toList(),
     );
   }
@@ -1732,20 +1913,376 @@ class _InsightBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: const Color(0xFFE2F0FF),
-          borderRadius: BorderRadius.circular(8),
+    width: double.infinity,
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+    decoration: BoxDecoration(
+      color: const Color(0xFFE2F0FF),
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Row(
+      children: [
+        const Icon(
+          Icons.auto_awesome_rounded,
+          color: Color(0xFF3976A8),
+          size: 15,
         ),
-        child: Row(
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              color: Color(0xFF315E82),
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _MarketCheckoutScreen extends StatefulWidget {
+  const _MarketCheckoutScreen({
+    required this.items,
+    required this.profile,
+    required this.imagePicker,
+    required this.onPlaceOrder,
+  });
+
+  final List<MarketOrderItem> items;
+  final FarmerProfile? profile;
+  final ReportImagePicker imagePicker;
+  final Future<MarketOrder?> Function({
+    required ReportImage proof,
+    required String customerName,
+    required String customerPhone,
+    required String deliveryAddress,
+  })
+  onPlaceOrder;
+
+  @override
+  State<_MarketCheckoutScreen> createState() => _MarketCheckoutScreenState();
+}
+
+class _MarketCheckoutScreenState extends State<_MarketCheckoutScreen> {
+  final _formKey = GlobalKey<FormState>();
+  late final _nameController = TextEditingController(
+    text: widget.profile?.name ?? '',
+  );
+  late final _phoneController = TextEditingController(
+    text: widget.profile?.phone ?? '',
+  );
+  late final _addressController = TextEditingController(
+    text: widget.profile?.address ?? '',
+  );
+  ReportImage? _proof;
+  String? _proofError;
+  bool _saving = false;
+
+  int get _total =>
+      widget.items.fold(0, (total, item) => total + item.total);
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    _addressController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _surface,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        foregroundColor: _ink,
+        elevation: 0,
+        title: const Text(
+          'Detail pesanan',
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+        ),
+      ),
+      body: Form(
+        key: _formKey,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
           children: [
-            const Icon(Icons.auto_awesome_rounded, color: Color(0xFF3976A8), size: 15),
-            const SizedBox(width: 6),
-            Expanded(child: Text(text, style: const TextStyle(color: Color(0xFF315E82), fontSize: 10, fontWeight: FontWeight.w600))),
+            const Text(
+              'Periksa detail sebelum membuat pesanan.',
+              style: TextStyle(color: _muted, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            _DetailCard(
+              title: 'Alamat pengiriman',
+              child: Column(
+                children: [
+                  TextFormField(
+                    key: const ValueKey('checkout-name'),
+                    controller: _nameController,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: _inputDecoration('Nama penerima'),
+                    validator: _requiredValue,
+                  ),
+                  const SizedBox(height: 10),
+                  TextFormField(
+                    key: const ValueKey('checkout-phone'),
+                    controller: _phoneController,
+                    keyboardType: TextInputType.phone,
+                    decoration: _inputDecoration('Nomor telepon'),
+                    validator: _requiredValue,
+                  ),
+                  const SizedBox(height: 10),
+                  TextFormField(
+                    key: const ValueKey('checkout-address'),
+                    controller: _addressController,
+                    textCapitalization: TextCapitalization.sentences,
+                    minLines: 2,
+                    maxLines: 4,
+                    decoration: _inputDecoration('Alamat lengkap'),
+                    validator: _requiredValue,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            _DetailCard(
+              title: 'Barang yang dipesan',
+              child: Column(
+                children: [
+                  ...widget.items.map(
+                    (item) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.productName,
+                            style: const TextStyle(
+                              color: _ink,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  '${item.quantity} × ${_formatPrice(item.unitPrice)}',
+                                  style: const TextStyle(
+                                    color: _muted,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                _formatPrice(item.total),
+                                style: const TextStyle(
+                                  color: _ink,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const Divider(),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Total harga',
+                        style: TextStyle(
+                          color: _ink,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Text(
+                        _formatPrice(_total),
+                        style: const TextStyle(
+                          color: Color(0xFF18834A),
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            _DetailCard(
+              title: 'Bukti transfer',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (_proof == null)
+                    OutlinedButton.icon(
+                      key: const ValueKey('checkout-upload-proof'),
+                      onPressed: _pickProof,
+                      icon: const Icon(Icons.upload_file_rounded),
+                      label: const Text('Unggah bukti transfer'),
+                    )
+                  else
+                    Row(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.memory(
+                            _proof!.bytes,
+                            width: 76,
+                            height: 64,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            _proof!.name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: _ink,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Ganti bukti transfer',
+                          onPressed: _pickProof,
+                          icon: const Icon(Icons.edit_outlined),
+                        ),
+                        IconButton(
+                          tooltip: 'Hapus bukti transfer',
+                          onPressed: () => setState(() {
+                            _proof = null;
+                            _proofError = 'Bukti transfer wajib diunggah.';
+                          }),
+                          icon: const Icon(Icons.delete_outline_rounded),
+                        ),
+                      ],
+                    ),
+                  if (_proofError != null) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      _proofError!,
+                      style: const TextStyle(
+                        color: Color(0xFFA1241A),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 4),
+                  const Text(
+                    'JPG atau PNG, maksimal 5 MB.',
+                    style: TextStyle(color: _muted, fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
+      ),
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            border: Border(top: BorderSide(color: Color(0xFFE1E8E2))),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Total pembayaran',
+                      style: TextStyle(color: _muted, fontSize: 11),
+                    ),
+                    Text(
+                      _formatPrice(_total),
+                      style: const TextStyle(
+                        color: _ink,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              FilledButton(
+                key: const ValueKey('checkout-place-order'),
+                onPressed: _saving ? null : _placeOrder,
+                child: _saving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Pesan'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickProof() async {
+    try {
+      final image = await widget.imagePicker();
+      if (image == null || !mounted) return;
+      final error = validateReportImage(image);
+      if (error != null) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error)));
+        return;
+      }
+      setState(() {
+        _proof = image;
+        _proofError = null;
+      });
+    } on ReportImagePickerException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Foto bukti transfer gagal dibuka: $error')),
+        );
+      }
+    }
+  }
+
+  Future<void> _placeOrder() async {
+    if (!_formKey.currentState!.validate()) return;
+    final proof = _proof;
+    if (proof == null) {
+      setState(() => _proofError = 'Bukti transfer wajib diunggah.');
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      final order = await widget.onPlaceOrder(
+        proof: proof,
+        customerName: _nameController.text.trim(),
+        customerPhone: _phoneController.text.trim(),
+        deliveryAddress: _addressController.text.trim(),
       );
+      if (order != null && mounted) Navigator.pop(context, order);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
 }
 
 class _OrderDetailScreen extends StatelessWidget {
@@ -1863,21 +2400,37 @@ class _OrderDetailScreen extends StatelessWidget {
                 ...order.items.map(
                   (item) => Padding(
                     padding: const EdgeInsets.only(bottom: 10),
-                    child: Row(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: Text(
-                            '${item.productName} × ${item.quantity}',
-                            style: const TextStyle(color: _muted, fontSize: 12),
-                          ),
-                        ),
                         Text(
-                          _formatPrice(item.total),
+                          item.productName,
                           style: const TextStyle(
                             color: _ink,
                             fontWeight: FontWeight.w700,
-                            fontSize: 12,
                           ),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '${item.quantity} × ${_formatPrice(item.unitPrice)}',
+                                style: const TextStyle(
+                                  color: _muted,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              _formatPrice(item.total),
+                              style: const TextStyle(
+                                color: _ink,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -1906,6 +2459,51 @@ class _OrderDetailScreen extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(height: 12),
+          _DetailCard(
+            title: 'Penerima & alamat pengiriman',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  order.customerName,
+                  style: const TextStyle(
+                    color: _ink,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  order.customerPhone.isEmpty
+                      ? 'Kontak belum diisi'
+                      : order.customerPhone,
+                  style: const TextStyle(color: _muted),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  order.deliveryAddress.isEmpty
+                      ? 'Alamat belum diisi'
+                      : order.deliveryAddress,
+                  style: const TextStyle(color: _ink, height: 1.4),
+                ),
+              ],
+            ),
+          ),
+          if (order.transferProofBytes != null) ...[
+            const SizedBox(height: 12),
+            _DetailCard(
+              title: 'Bukti transfer',
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.memory(
+                  order.transferProofBytes!,
+                  height: 150,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -1916,12 +2514,14 @@ class _AdviserReportScreen extends StatefulWidget {
   const _AdviserReportScreen({
     required this.report,
     required this.products,
+    required this.repository,
     required this.onSave,
     required this.onOpenChat,
   });
 
   final CropReport report;
   final List<MarketProduct> products;
+  final SihamaRepository repository;
   final Future<bool> Function(CropReport report) onSave;
   final VoidCallback onOpenChat;
 
@@ -1930,19 +2530,20 @@ class _AdviserReportScreen extends StatefulWidget {
 }
 
 class _AdviserReportScreenState extends State<_AdviserReportScreen> {
-  static const _diseases = [
-    ('Hawar Daun Bakteri', 'Xanthomonas oryzae pv. oryzae'),
-    ('Hawar Daun Pyricularia', 'Pyricularia oryzae'),
-    ('Blas', 'Pyricularia oryzae'),
-    ('Antraknosa', 'Colletotrichum capsici'),
-    ('Layu Fusarium', 'Fusarium oxysporum'),
-  ];
-
   late String? _diagnosis = widget.report.diagnosis;
   late final TextEditingController _recommendationController =
       TextEditingController(text: widget.report.recommendation ?? '');
+  List<DiagnosisReference> _diagnosisReferences = [];
+  bool _loadingDiagnosisReferences = true;
+  Object? _diagnosisLoadError;
   final Set<int> _selectedProductIds = {};
   bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDiagnosisReferences();
+  }
 
   @override
   void dispose() {
@@ -1950,17 +2551,64 @@ class _AdviserReportScreenState extends State<_AdviserReportScreen> {
     super.dispose();
   }
 
+  DiagnosisReference? get _selectedDiagnosisReference {
+    for (final reference in _diagnosisReferences) {
+      if (reference.name == _diagnosis) return reference;
+    }
+    return null;
+  }
+
+  Future<void> _openDiagnosisPicker() async {
+    final selected = await showModalBottomSheet<DiagnosisReference>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => _DiagnosisPickerSheet(
+        references: _diagnosisReferences,
+        selectedSlug: _selectedDiagnosisReference?.slug,
+      ),
+    );
+    if (selected == null || !mounted) return;
+    setState(() => _diagnosis = selected.name);
+  }
+
+  Future<void> _loadDiagnosisReferences() async {
+    setState(() {
+      _loadingDiagnosisReferences = true;
+      _diagnosisLoadError = null;
+    });
+    try {
+      final references = await widget.repository.getDiagnosisReferences();
+      if (!mounted) return;
+      setState(() {
+        _diagnosisReferences = references;
+        _loadingDiagnosisReferences = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _diagnosisLoadError = error;
+        _loadingDiagnosisReferences = false;
+      });
+    }
+  }
+
   Future<void> _save() async {
-    final diagnosis = _diagnosis;
+    final diagnosis = _selectedDiagnosisReference;
     if (diagnosis == null || _recommendationController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Pilih diagnosis dan isi rekomendasi.')),
+        const SnackBar(
+          content: Text('Pilih diagnosis dari basis data dan isi rekomendasi.'),
+        ),
       );
       return;
     }
     setState(() => _saving = true);
     final selectedProducts = widget.products
-        .where((product) => product.id != null && _selectedProductIds.contains(product.id))
+        .where(
+          (product) =>
+              product.id != null && _selectedProductIds.contains(product.id),
+        )
         .map((product) => product.name)
         .toList();
     final recommendation = _recommendationController.text.trim();
@@ -1970,7 +2618,7 @@ class _AdviserReportScreenState extends State<_AdviserReportScreen> {
     final saved = await widget.onSave(
       widget.report.copyWith(
         status: 'Selesai Ditinjau',
-        diagnosis: diagnosis,
+        diagnosis: diagnosis.name,
         recommendation: completeRecommendation,
       ),
     );
@@ -1986,72 +2634,252 @@ class _AdviserReportScreenState extends State<_AdviserReportScreen> {
       backgroundColor: Colors.white,
       foregroundColor: _ink,
       elevation: 0,
-      title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('Tinjau & Diagnosis', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-        Text('${widget.report.crop} · ${_formatDate(widget.report.date)}', style: const TextStyle(fontSize: 11, color: _muted)),
-      ]),
-    ),
-    body: ListView(padding: const EdgeInsets.fromLTRB(16, 12, 16, 24), children: [
-      if (widget.report.photoBytes != null)
-        ClipRRect(borderRadius: BorderRadius.circular(15), child: Image.memory(widget.report.photoBytes!, height: 180, fit: BoxFit.cover))
-      else
-        Container(height: 150, decoration: BoxDecoration(borderRadius: BorderRadius.circular(15), gradient: const LinearGradient(colors: [Color(0xFFD7F0D3), Color(0xFFB8DF9B)])), child: const Icon(Icons.eco_outlined, size: 38, color: _green)),
-      const SizedBox(height: 12),
-      Row(children: [Expanded(child: Text('Laporan ${widget.report.id} · ${widget.report.location}', style: const TextStyle(fontSize: 12, color: _ink, fontWeight: FontWeight.w700))), _StatusBadge(status: widget.report.status)]),
-      const SizedBox(height: 12),
-      _DetailCard(title: 'Gejala dilaporkan', child: Text(widget.report.description, style: const TextStyle(color: _ink, height: 1.45))),
-      const SizedBox(height: 8),
-      _SymptomChips(description: widget.report.description),
-      const SizedBox(height: 10),
-      _InsightBanner(text: 'Saran awal sistem: ${_suggestedDiagnosis(widget.report.crop)}. Pastikan diagnosis akhir sesuai pemeriksaan Anda.'),
-      const SizedBox(height: 14),
-      const Text('Jenis hama/penyakit', style: TextStyle(color: _ink, fontWeight: FontWeight.w800)),
-      const SizedBox(height: 8),
-      ..._diseases.map((disease) {
-        final selected = _diagnosis == disease.$1;
-        return InkWell(
-          onTap: () => setState(() => _diagnosis = disease.$1),
-          borderRadius: BorderRadius.circular(13),
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(13), border: Border.all(color: selected ? _green : const Color(0xFFE2E9E3), width: selected ? 1.5 : 1)),
-            child: Row(children: [Icon(selected ? Icons.radio_button_checked : Icons.radio_button_unchecked, color: selected ? _green : _muted, size: 20), const SizedBox(width: 9), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(disease.$1, style: const TextStyle(color: _ink, fontWeight: FontWeight.w700, fontSize: 12)), Text(disease.$2, style: const TextStyle(color: _muted, fontSize: 10))]))]),
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Tinjau & Diagnosis',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
           ),
-        );
-      }),
-      const SizedBox(height: 6),
-      const Text('Rekomendasi penanganan', style: TextStyle(color: _ink, fontWeight: FontWeight.w800)),
-      const SizedBox(height: 8),
-      TextField(controller: _recommendationController, maxLines: 4, decoration: _inputDecoration('Tulis rekomendasi yang akan diterima petani')),
-      const SizedBox(height: 14),
-      const Text('Rekomendasi obat', style: TextStyle(color: _ink, fontWeight: FontWeight.w800)),
-      const SizedBox(height: 6),
-      ...widget.products.where((product) => product.stock > 0).take(5).map((product) => CheckboxListTile(
-        value: product.id != null && _selectedProductIds.contains(product.id),
-        onChanged: product.id == null ? null : (selected) => setState(() {
-          if (selected == true) {
-            _selectedProductIds.add(product.id!);
-          } else {
-            _selectedProductIds.remove(product.id);
-          }
-        }),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-        dense: true,
-        activeColor: _green,
-        title: Text(product.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-        subtitle: Text('${product.category} · ${product.stock} tersedia', style: const TextStyle(fontSize: 10)),
-        secondary: Icon(_productIcon(product.category), color: _green),
-      )),
-      const SizedBox(height: 16),
-      OutlinedButton.icon(
-        onPressed: widget.onOpenChat,
-        icon: const Icon(Icons.chat_bubble_outline_rounded),
-        label: const Text('Chat dengan Pelapor'),
+          Text(
+            '${widget.report.crop} · ${_formatDate(widget.report.date)}',
+            style: const TextStyle(fontSize: 11, color: _muted),
+          ),
+        ],
       ),
-      const SizedBox(height: 8),
-      SizedBox(height: 48, child: FilledButton.icon(onPressed: _saving ? null : _save, icon: _saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.check_rounded), label: Text(_saving ? 'Menyimpan...' : 'Simpan Diagnosis'))),
-    ]),
+    ),
+    body: ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      children: [
+        if (widget.report.photoBytes != null)
+          ClipRRect(
+            borderRadius: BorderRadius.circular(15),
+            child: Image.memory(
+              widget.report.photoBytes!,
+              height: 180,
+              fit: BoxFit.cover,
+            ),
+          )
+        else
+          Container(
+            height: 150,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(15),
+              gradient: const LinearGradient(
+                colors: [Color(0xFFD7F0D3), Color(0xFFB8DF9B)],
+              ),
+            ),
+            child: const Icon(Icons.eco_outlined, size: 38, color: _green),
+          ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Laporan ${widget.report.id} · ${widget.report.location}',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: _ink,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            _StatusBadge(status: widget.report.status),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _DetailCard(
+          title: 'Gejala dilaporkan',
+          child: Text(
+            widget.report.description,
+            style: const TextStyle(color: _ink, height: 1.45),
+          ),
+        ),
+        const SizedBox(height: 8),
+        _SymptomChips(description: widget.report.description),
+        const SizedBox(height: 10),
+        _InsightBanner(
+          text: 'Referensi ini berasal dari dataset cannabis. Cocokkan kembali dengan jenis tanaman dan hasil pemeriksaan sebelum menetapkan diagnosis.',
+        ),
+        const SizedBox(height: 14),
+        const Text(
+          'Jenis hama/penyakit',
+          style: TextStyle(color: _ink, fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 8),
+        if (_loadingDiagnosisReferences)
+          const LinearProgressIndicator()
+        else if (_diagnosisLoadError != null)
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Referensi diagnosis gagal dimuat: $_diagnosisLoadError',
+                style: const TextStyle(color: Colors.red),
+              ),
+              TextButton(
+                onPressed: _loadDiagnosisReferences,
+                child: const Text('Coba muat ulang'),
+              ),
+            ],
+          )
+        else if (_diagnosisReferences.isEmpty)
+          const Text('Belum ada referensi diagnosis di basis data.')
+        else
+          InkWell(
+            key: const ValueKey('diagnosis-picker'),
+            onTap: _openDiagnosisPicker,
+            borderRadius: BorderRadius.circular(14),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: _selectedDiagnosisReference == null
+                      ? const Color(0xFFDCE5DE)
+                      : const Color(0xFF80B98C),
+                ),
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 19,
+                    backgroundColor: const Color(0xFFE7F2ED),
+                    child: Icon(
+                      _selectedDiagnosisReference == null
+                          ? Icons.search_rounded
+                          : _diagnosisCategoryIcon(
+                              _selectedDiagnosisReference!.category,
+                            ),
+                      color: _green,
+                      size: 19,
+                    ),
+                  ),
+                  const SizedBox(width: 11),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _selectedDiagnosisReference?.name ??
+                              'Cari hama atau penyakit',
+                          style: const TextStyle(
+                            color: _ink,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          _selectedDiagnosisReference?.category ??
+                              'Cari berdasarkan nama, kategori, atau gejala',
+                          style: const TextStyle(color: _muted, fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.expand_more_rounded, color: _muted),
+                ],
+              ),
+            ),
+          ),
+        if (_selectedDiagnosisReference case final reference?) ...[
+          const SizedBox(height: 10),
+          _DetailCard(
+            title: 'Gejala awal (referensi dataset cannabis)',
+            child: Text(
+              _formatSemicolonList(reference.firstSymptoms),
+              style: const TextStyle(color: _ink, height: 1.45),
+            ),
+          ),
+        ] else if (_diagnosis != null &&
+            !_loadingDiagnosisReferences &&
+            _diagnosisLoadError == null) ...[
+          const SizedBox(height: 6),
+          const Text(
+            'Diagnosis tersimpan sebelumnya tidak ada di dataset. Pilih diagnosis yang sesuai dari daftar.',
+            style: TextStyle(color: _muted, fontSize: 12),
+          ),
+        ],
+        const SizedBox(height: 6),
+        const Text(
+          'Rekomendasi penanganan',
+          style: TextStyle(color: _ink, fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _recommendationController,
+          maxLines: 4,
+          decoration: _inputDecoration(
+            'Tulis rekomendasi yang akan diterima petani',
+          ),
+        ),
+        const SizedBox(height: 14),
+        const Text(
+          'Rekomendasi obat',
+          style: TextStyle(color: _ink, fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 6),
+        ...widget.products
+            .where((product) => product.stock > 0)
+            .take(5)
+            .map(
+              (product) => CheckboxListTile(
+                value:
+                    product.id != null &&
+                    _selectedProductIds.contains(product.id),
+                onChanged: product.id == null
+                    ? null
+                    : (selected) => setState(() {
+                        if (selected == true) {
+                          _selectedProductIds.add(product.id!);
+                        } else {
+                          _selectedProductIds.remove(product.id);
+                        }
+                      }),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                dense: true,
+                activeColor: _green,
+                title: Text(
+                  product.name,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                subtitle: Text(
+                  '${product.category} · ${product.stock} tersedia',
+                  style: const TextStyle(fontSize: 10),
+                ),
+                secondary: Icon(_productIcon(product.category), color: _green),
+              ),
+            ),
+        const SizedBox(height: 16),
+        OutlinedButton.icon(
+          onPressed: widget.onOpenChat,
+          icon: const Icon(Icons.chat_bubble_outline_rounded),
+          label: const Text('Chat dengan Pelapor'),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 48,
+          child: FilledButton.icon(
+            onPressed: _saving ? null : _save,
+            icon: _saving
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.check_rounded),
+            label: Text(_saving ? 'Menyimpan...' : 'Simpan Diagnosis'),
+          ),
+        ),
+      ],
+    ),
   );
 }
 
@@ -2220,14 +3048,254 @@ class _HistoryTabState extends State<_HistoryTab> {
   }
 }
 
+class _DiagnosisPickerSheet extends StatefulWidget {
+  const _DiagnosisPickerSheet({
+    required this.references,
+    required this.selectedSlug,
+  });
+
+  final List<DiagnosisReference> references;
+  final String? selectedSlug;
+
+  @override
+  State<_DiagnosisPickerSheet> createState() => _DiagnosisPickerSheetState();
+}
+
+class _DiagnosisPickerSheetState extends State<_DiagnosisPickerSheet> {
+  final _searchController = TextEditingController();
+  String _query = '';
+  String _category = 'Semua';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final categories =
+        widget.references
+            .map((reference) => reference.category)
+            .toSet()
+            .toList()
+          ..sort();
+    final references = widget.references.where((reference) {
+      final matchesCategory =
+          _category == 'Semua' || reference.category == _category;
+      final searchableText = [
+        reference.name,
+        reference.category,
+        reference.firstSymptoms,
+        reference.shortDescription,
+      ].join(' ').toLowerCase();
+      return matchesCategory && searchableText.contains(_query);
+    }).toList();
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: FractionallySizedBox(
+        heightFactor: 0.86,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 8, 18, 18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Pilih hama atau penyakit',
+                style: TextStyle(
+                  color: _ink,
+                  fontSize: 19,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Cari berdasarkan nama, kategori, atau gejala awal.',
+                style: TextStyle(color: _muted, fontSize: 12),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                key: const ValueKey('diagnosis-search'),
+                controller: _searchController,
+                autofocus: true,
+                onChanged: (value) =>
+                    setState(() => _query = value.trim().toLowerCase()),
+                decoration: _inputDecoration('Ketik untuk mencari').copyWith(
+                  prefixIcon: const Icon(Icons.search_rounded, color: _green),
+                  suffixIcon: _query.isEmpty
+                      ? null
+                      : IconButton(
+                          tooltip: 'Hapus pencarian',
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() => _query = '');
+                          },
+                          icon: const Icon(Icons.close_rounded),
+                        ),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                height: 38,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: ['Semua', ...categories]
+                      .map(
+                        (category) => Padding(
+                          padding: const EdgeInsets.only(right: 7),
+                          child: ChoiceChip(
+                            label: Text(
+                              category,
+                              style: TextStyle(
+                                color: _category == category
+                                    ? Colors.white
+                                    : _ink,
+                                fontSize: 11,
+                              ),
+                            ),
+                            selected: _category == category,
+                            showCheckmark: false,
+                            selectedColor: _green,
+                            backgroundColor: Colors.white,
+                            side: BorderSide(
+                              color: _category == category
+                                  ? _green
+                                  : const Color(0xFFE0E8E2),
+                            ),
+                            onSelected: (_) =>
+                                setState(() => _category = category),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '${references.length} hasil',
+                style: const TextStyle(
+                  color: _muted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Expanded(
+                child: references.isEmpty
+                    ? const Center(
+                        child: Text(
+                          'Tidak ada hasil. Coba kata kunci lain.',
+                          style: TextStyle(color: _muted),
+                        ),
+                      )
+                    : ListView.separated(
+                        keyboardDismissBehavior:
+                            ScrollViewKeyboardDismissBehavior.onDrag,
+                        itemCount: references.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 7),
+                        itemBuilder: (context, index) {
+                          final reference = references[index];
+                          final selected =
+                              reference.slug == widget.selectedSlug;
+                          return Material(
+                            color: selected
+                                ? const Color(0xFFEDF6EF)
+                                : Colors.white,
+                            borderRadius: BorderRadius.circular(13),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(13),
+                              onTap: () => Navigator.pop(context, reference),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 11,
+                                ),
+                                child: Row(
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 18,
+                                      backgroundColor: const Color(0xFFE7F2ED),
+                                      child: Icon(
+                                        _diagnosisCategoryIcon(
+                                          reference.category,
+                                        ),
+                                        color: _green,
+                                        size: 18,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 11),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            reference.name,
+                                            style: const TextStyle(
+                                              color: _ink,
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            reference.category,
+                                            style: const TextStyle(
+                                              color: _green,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            _formatSemicolonList(
+                                              reference.firstSymptoms,
+                                            ),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              color: _muted,
+                                              height: 1.3,
+                                              fontSize: 11,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    if (selected)
+                                      const Icon(
+                                        Icons.check_circle_rounded,
+                                        color: _green,
+                                        size: 20,
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ReportTab extends StatefulWidget {
   const _ReportTab({
     required this.imagePicker,
+    required this.repository,
     required this.onSubmit,
     required this.onCancel,
   });
 
   final ReportImagePicker imagePicker;
+  final SihamaRepository repository;
   final Future<bool> Function(CropReport report) onSubmit;
   final VoidCallback onCancel;
 
@@ -2241,20 +3309,15 @@ class _ReportTabState extends State<_ReportTab> {
   final _descriptionController = TextEditingController();
   final Set<String> _selectedSymptoms = {};
   ReportImage? _selectedImage;
+  List<DiagnosisReference> _symptomReferences = [];
+  bool _loadingSymptoms = true;
+  Object? _symptomLoadError;
 
-  static const _symptoms = [
-    'Daun menguning dari tepi',
-    'Bercak memanjang kering',
-    'Bercak belah ketupat',
-    'Leher malai patah',
-    'Daun menggulung',
-    'Batang membusuk',
-    'Daun keriting',
-    'Bercak cekung pada buah',
-    'Buah membusuk',
-    'Daun layu',
-    'Batang menghitam',
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _loadSymptoms();
+  }
 
   @override
   void dispose() {
@@ -2450,17 +3513,32 @@ class _ReportTabState extends State<_ReportTab> {
                   decoration:
                       _inputDecoration(
                         _selectedSymptoms.isEmpty
-                            ? 'Pilih gejala yang terlihat'
+                            ? _loadingSymptoms
+                                  ? 'Memuat gejala awal dari dataset...'
+                                  : _symptomLoadError != null
+                                  ? 'Gejala gagal dimuat'
+                                  : 'Pilih gejala awal yang terlihat'
                             : '${_selectedSymptoms.length} gejala dipilih',
                       ).copyWith(
                         prefixIcon: const Icon(
                           Icons.search_rounded,
                           color: _muted,
                         ),
-                        suffixIcon: const Icon(
-                          Icons.arrow_drop_down_rounded,
-                          color: _muted,
-                        ),
+                        suffixIcon: _loadingSymptoms
+                            ? const Padding(
+                                padding: EdgeInsets.all(14),
+                                child: SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                              )
+                            : const Icon(
+                                Icons.arrow_drop_down_rounded,
+                                color: _muted,
+                              ),
                       ),
                 ),
                 if (_selectedSymptoms.isNotEmpty) ...[
@@ -2528,12 +3606,27 @@ class _ReportTabState extends State<_ReportTab> {
   }
 
   Future<void> _showSymptomPicker() async {
+    if (_loadingSymptoms) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sedang memuat referensi gejala.')),
+      );
+      return;
+    }
+    if (_symptomLoadError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Referensi gejala gagal dimuat: $_symptomLoadError'),
+          action: SnackBarAction(label: 'Coba lagi', onPressed: _loadSymptoms),
+        ),
+      );
+      return;
+    }
     final selectedSymptoms = await showModalBottomSheet<Set<String>>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (context) => _SymptomPickerSheet(
-        symptoms: _symptoms,
+        references: _symptomReferences,
         selectedSymptoms: _selectedSymptoms,
       ),
     );
@@ -2543,6 +3636,29 @@ class _ReportTabState extends State<_ReportTab> {
         ..clear()
         ..addAll(selectedSymptoms);
     });
+  }
+
+  Future<void> _loadSymptoms() async {
+    setState(() {
+      _loadingSymptoms = true;
+      _symptomLoadError = null;
+    });
+    try {
+      final references = await widget.repository.getDiagnosisReferences();
+      if (!mounted) return;
+      setState(() {
+        _symptomReferences = references
+            .where((reference) => reference.firstSymptoms.trim().isNotEmpty)
+            .toList();
+        _loadingSymptoms = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _symptomLoadError = error;
+        _loadingSymptoms = false;
+      });
+    }
   }
 
   Future<void> _pickImage() async {
@@ -2614,11 +3730,11 @@ class _ReportTabState extends State<_ReportTab> {
 
 class _SymptomPickerSheet extends StatefulWidget {
   const _SymptomPickerSheet({
-    required this.symptoms,
+    required this.references,
     required this.selectedSymptoms,
   });
 
-  final List<String> symptoms;
+  final List<DiagnosisReference> references;
   final Set<String> selectedSymptoms;
 
   @override
@@ -2631,8 +3747,18 @@ class _SymptomPickerSheetState extends State<_SymptomPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final visibleSymptoms = widget.symptoms
-        .where((symptom) => symptom.toLowerCase().contains(_query))
+    final visibleSymptoms = widget.references
+        .expand(
+          (reference) => _splitSemicolonItems(reference.firstSymptoms)
+              .where(
+                (symptom) => [
+                  reference.name,
+                  reference.category,
+                  symptom,
+                ].join(' ').toLowerCase().contains(_query),
+              )
+              .map((symptom) => (reference: reference, symptom: symptom)),
+        )
         .toList();
 
     return Padding(
@@ -2672,27 +3798,36 @@ class _SymptomPickerSheetState extends State<_SymptomPickerSheet> {
                         ),
                       )
                     : ListView(
-                        children: visibleSymptoms
-                            .map(
-                              (symptom) => CheckboxListTile(
-                                value: _selectedSymptoms.contains(symptom),
-                                title: Text(symptom),
-                                controlAffinity:
-                                    ListTileControlAffinity.leading,
-                                contentPadding: EdgeInsets.zero,
-                                activeColor: _green,
-                                onChanged: (selected) {
-                                  setState(() {
-                                    if (selected == true) {
-                                      _selectedSymptoms.add(symptom);
-                                    } else {
-                                      _selectedSymptoms.remove(symptom);
-                                    }
-                                  });
-                                },
+                        children: visibleSymptoms.map((item) {
+                          final reference = item.reference;
+                          final symptom = item.symptom;
+                          return CheckboxListTile(
+                            value: _selectedSymptoms.contains(symptom),
+                            title: Text(
+                              symptom,
+                              style: const TextStyle(color: _ink, fontSize: 13),
+                            ),
+                            subtitle: Text(
+                              '${reference.name} · ${reference.category}',
+                              style: const TextStyle(
+                                color: _muted,
+                                fontSize: 11,
                               ),
-                            )
-                            .toList(),
+                            ),
+                            controlAffinity: ListTileControlAffinity.leading,
+                            contentPadding: EdgeInsets.zero,
+                            activeColor: _green,
+                            onChanged: (selected) {
+                              setState(() {
+                                if (selected == true) {
+                                  _selectedSymptoms.add(symptom);
+                                } else {
+                                  _selectedSymptoms.remove(symptom);
+                                }
+                              });
+                            },
+                          );
+                        }).toList(),
                       ),
               ),
               const SizedBox(height: 8),
@@ -2715,6 +3850,8 @@ class _SymptomPickerSheetState extends State<_SymptomPickerSheet> {
 class _MarketTab extends StatefulWidget {
   const _MarketTab({
     required this.products,
+    required this.recommendedProducts,
+    required this.profile,
     required this.canOrder,
     required this.canManage,
     required this.imagePicker,
@@ -2726,10 +3863,18 @@ class _MarketTab extends StatefulWidget {
   });
 
   final List<MarketProduct> products;
+  final List<MarketProduct> recommendedProducts;
+  final FarmerProfile? profile;
   final bool canOrder;
   final bool canManage;
   final ReportImagePicker imagePicker;
-  final Future<bool> Function(List<MarketOrderItem> items, ReportImage proof)
+  final Future<MarketOrder?> Function(
+    List<MarketOrderItem> items,
+    ReportImage proof, {
+    required String customerName,
+    required String customerPhone,
+    required String deliveryAddress,
+  })
   onCheckout;
   final Future<bool> Function(MarketProduct product, int stock) onChangeStock;
   final VoidCallback onCreate;
@@ -2744,7 +3889,6 @@ class _MarketTabState extends State<_MarketTab> {
   String _searchQuery = '';
   String _selectedCategory = 'Semua';
   final Map<int, int> _cart = {};
-  ReportImage? _paymentProof;
 
   static const _categories = [
     'Semua',
@@ -2764,6 +3908,19 @@ class _MarketTabState extends State<_MarketTab> {
           _selectedCategory == 'Semua' || product.category == _selectedCategory;
       return matchesQuery && matchesCategory;
     }).toList();
+    final recommendedProducts = visibleProducts.where((product) {
+      return widget.recommendedProducts.any(
+        (recommended) => recommended.id != null && recommended.id == product.id,
+      );
+    }).toList();
+    final recommendedKeys = recommendedProducts
+        .map((product) => product.id ?? product.name)
+        .toSet();
+    final otherProducts = visibleProducts
+        .where(
+          (product) => !recommendedKeys.contains(product.id ?? product.name),
+        )
+        .toList();
     final cartItems = _cartItems();
     final cartTotal = cartItems.fold(0, (total, item) => total + item.total);
 
@@ -2771,29 +3928,42 @@ class _MarketTabState extends State<_MarketTab> {
       children: [
         Expanded(
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(18, 22, 18, 28),
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
             children: [
-              _PageHeading(
-                eyebrow: widget.canManage
-                    ? 'Kelola katalog toko'
-                    : 'Kebutuhan pertanian',
-                title: widget.canManage ? 'Produk & Stok' : 'AgriMarket',
-                subtitle: widget.canManage
-                    ? 'Atur produk, harga, dan stok Toko Tani Makmur.'
-                    : 'Temukan produk pilihan untuk membantu merawat tanaman.',
-              ),
-              if (widget.canManage) ...[
-                const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: IconButton.filled(
-                    onPressed: widget.onCreate,
-                    tooltip: 'Tambah produk',
-                    icon: const Icon(Icons.add_rounded),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.canManage ? 'Produk & Stok' : 'AgriMarket',
+                          style: const TextStyle(
+                            color: _ink,
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          widget.canManage
+                              ? 'Atur produk, harga, dan stok toko.'
+                              : 'Obat pertanian dari toko mitra',
+                          style: const TextStyle(color: _muted, fontSize: 12),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
-              const SizedBox(height: 8),
+                  if (widget.canManage)
+                    FilledButton.icon(
+                      onPressed: widget.onCreate,
+                      icon: const Icon(Icons.add_rounded, size: 18),
+                      label: const Text('Tambah produk'),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
               TextField(
                 onChanged: (value) =>
                     setState(() => _searchQuery = value.trim().toLowerCase()),
@@ -2801,7 +3971,7 @@ class _MarketTabState extends State<_MarketTab> {
                   prefixIcon: const Icon(Icons.search_rounded, color: _muted),
                 ),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 10),
               SizedBox(
                 height: 38,
                 child: ListView(
@@ -2815,76 +3985,158 @@ class _MarketTabState extends State<_MarketTab> {
                   }).toList(),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 10),
               if (!widget.canOrder)
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEAF3ED),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Row(
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 10),
+                  child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.info_outline_rounded, color: _green),
-                      SizedBox(width: 10),
+                      Icon(Icons.info_outline_rounded, color: _green, size: 17),
+                      SizedBox(width: 7),
                       Expanded(
                         child: Text(
                           'Pemesanan akan tersedia setelah laporan tanaman selesai ditinjau.',
-                          style: TextStyle(color: _ink, height: 1.4),
+                          style: TextStyle(
+                            color: _ink,
+                            fontSize: 11,
+                            height: 1.35,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
-              const SizedBox(height: 14),
+              if (!widget.canManage && recommendedProducts.isNotEmpty) ...[
+                const _MarketSectionHeading(title: 'Direkomendasikan'),
+                const SizedBox(height: 8),
+                const _MarketRecommendationNote(),
+                const SizedBox(height: 12),
+                ...recommendedProducts.map(
+                  (product) => Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _ProductCard(
+                      product: product,
+                      canOrder: widget.canOrder,
+                      canManage: false,
+                      isRecommended: true,
+                      showRecommendationBadge: true,
+                      quantity: _cart[product.id] ?? 0,
+                      onOrder: () => _addToCart(product),
+                      onRemoveFromCart: () => _removeFromCart(product),
+                      onChangeStock: (stock) =>
+                          widget.onChangeStock(product, stock),
+                      onEdit: () => widget.onEdit(product),
+                      onDelete: () => widget.onDelete(product),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+              ],
               if (visibleProducts.isEmpty)
                 const _EmptyState(
                   icon: Icons.search_off_rounded,
                   title: 'Produk tidak ditemukan',
                   message: 'Coba kata kunci atau kategori yang berbeda.',
                 )
-              else
-                ...visibleProducts.map(
+              else if (otherProducts.isNotEmpty) ...[
+                _MarketSectionHeading(
+                  title: widget.canManage
+                      ? 'Produk Toko'
+                      : recommendedProducts.isNotEmpty
+                      ? 'Obat Lainnya'
+                      : 'Produk Tersedia',
+                ),
+                if (!widget.canManage && recommendedProducts.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Produk lain tetap tersedia, tetapi tidak direkomendasikan untuk diagnosis ini.',
+                    style: TextStyle(color: _muted, fontSize: 11, height: 1.4),
+                  ),
+                ],
+                const SizedBox(height: 10),
+                ...otherProducts.map(
                   (product) => Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.only(bottom: 10),
                     child: _ProductCard(
                       product: product,
                       canOrder: widget.canOrder,
                       canManage: widget.canManage,
+                      isRecommended: false,
+                      showRecommendationBadge:
+                          !widget.canManage &&
+                          widget.recommendedProducts.isNotEmpty,
+                      quantity: _cart[product.id] ?? 0,
                       onOrder: () => _addToCart(product),
-                      onChangeStock: (stock) => widget.onChangeStock(product, stock),
+                      onRemoveFromCart: () => _removeFromCart(product),
+                      onChangeStock: (stock) =>
+                          widget.onChangeStock(product, stock),
                       onEdit: () => widget.onEdit(product),
                       onDelete: () => widget.onDelete(product),
                     ),
                   ),
                 ),
+              ],
               const _PrototypeNote(),
             ],
           ),
         ),
         if (!widget.canManage)
           Container(
-            padding: const EdgeInsets.fromLTRB(18, 8, 18, 8),
-            color: _surface,
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            decoration: const BoxDecoration(
+              color: Color(0xFFF5F8F5),
+              border: Border(top: BorderSide(color: Color(0xFFE1E8E2))),
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-              _buildPaymentProofPanel(cartTotal),
-              SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: widget.canOrder && cartItems.isNotEmpty
-                    ? _checkout
-                    : null,
-                icon: const Icon(Icons.shopping_cart_checkout_rounded),
-                label: Text(
-                  cartItems.isEmpty
-                      ? 'Keranjang kosong'
-                      : 'Lanjutkan pesanan (${cartItems.length}) · ${_formatPrice(cartTotal)}',
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Total keranjang',
+                        style: TextStyle(
+                          color: _muted,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        _formatPrice(cartTotal),
+                        style: const TextStyle(
+                          color: Color(0xFF1E6A30),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              ),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: widget.canOrder && cartItems.isNotEmpty
+                        ? _checkout
+                        : null,
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size.fromHeight(44),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    icon: const Icon(Icons.shopping_cart_checkout_rounded),
+                    label: Text(
+                      cartItems.isEmpty
+                          ? 'Keranjang kosong'
+                          : 'Lanjutkan pesanan (${cartItems.length})',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -2904,73 +4156,6 @@ class _MarketTabState extends State<_MarketTab> {
           ),
         )
         .toList();
-  }
-
-  Widget _buildPaymentProofPanel(int total) => Padding(
-    padding: const EdgeInsets.only(bottom: 8),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          const Text('Total harga', style: TextStyle(color: _muted, fontSize: 11)),
-          Text(_formatPrice(total), style: const TextStyle(color: Color(0xFF18834A), fontSize: 15, fontWeight: FontWeight.w800)),
-        ]),
-        const SizedBox(height: 7),
-        const Text('Bukti transfer', style: TextStyle(color: _ink, fontSize: 11, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 5),
-        InkWell(
-          onTap: _pickPaymentProof,
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            height: 82,
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: const Color(0xFFF1FAF2),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFF71C883), width: 1.2),
-            ),
-            child: _paymentProof == null
-                ? const Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    Icon(Icons.add_photo_alternate_outlined, color: _green, size: 22),
-                    SizedBox(height: 3),
-                    Text('Unggah bukti transfer', style: TextStyle(color: _green, fontSize: 10, fontWeight: FontWeight.w700)),
-                    Text('JPG/PNG, maks. 5 MB', style: TextStyle(color: _muted, fontSize: 9)),
-                  ])
-                : ClipRRect(
-                    borderRadius: BorderRadius.circular(11),
-                    child: Stack(fit: StackFit.expand, children: [
-                      Image.memory(_paymentProof!.bytes, fit: BoxFit.cover),
-                      Align(alignment: Alignment.bottomCenter, child: Container(
-                        width: double.infinity,
-                        color: Colors.black54,
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        child: Text(_paymentProof!.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 9)),
-                      )),
-                    ]),
-                  ),
-          ),
-        ),
-        if (_paymentProof != null)
-          Align(alignment: Alignment.centerRight, child: TextButton(onPressed: _pickPaymentProof, child: const Text('Ganti bukti'))),
-      ],
-    ),
-  );
-
-  Future<void> _pickPaymentProof() async {
-    try {
-      final image = await widget.imagePicker();
-      if (image == null || !mounted) return;
-      final error = validateReportImage(image);
-      if (error != null) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
-        return;
-      }
-      setState(() => _paymentProof = image);
-    } on ReportImagePickerException catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
-    } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Foto bukti transfer gagal dibuka: $error')));
-    }
   }
 
   void _addToCart(MarketProduct product) {
@@ -2995,76 +4180,56 @@ class _MarketTabState extends State<_MarketTab> {
     setState(() => _cart[id] = quantity + 1);
   }
 
+  void _removeFromCart(MarketProduct product) {
+    final id = product.id;
+    if (id == null) {
+      return;
+    }
+    final quantity = _cart[id] ?? 0;
+    if (quantity == 0) {
+      return;
+    }
+    setState(() {
+      if (quantity == 1) {
+        _cart.remove(id);
+      } else {
+        _cart[id] = quantity - 1;
+      }
+    });
+  }
+
   Future<void> _checkout() async {
     final items = _cartItems();
     if (items.isEmpty) return;
-    final proof = _paymentProof;
-    if (proof == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Unggah bukti transfer sebelum memesan.')),
-      );
-      return;
-    }
-    final total = items.fold(0, (sum, item) => sum + item.total);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Konfirmasi pesanan'),
-        content: SizedBox(
-          width: 420,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ...items.map(
-                (item) => ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(item.productName),
-                  subtitle: Text(
-                    '${item.quantity} × ${_formatPrice(item.unitPrice)}',
-                  ),
-                  trailing: Text(_formatPrice(item.total)),
-                ),
+    final order = await Navigator.of(context).push<MarketOrder>(
+      MaterialPageRoute<MarketOrder>(
+        builder: (_) => _MarketCheckoutScreen(
+          items: items,
+          profile: widget.profile,
+          imagePicker: widget.imagePicker,
+          onPlaceOrder:
+              ({
+                required ReportImage proof,
+                required String customerName,
+                required String customerPhone,
+                required String deliveryAddress,
+              }) => widget.onCheckout(
+                items,
+                proof,
+                customerName: customerName,
+                customerPhone: customerPhone,
+                deliveryAddress: deliveryAddress,
               ),
-              const Divider(),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Total',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  Text(
-                    _formatPrice(total),
-                    style: const TextStyle(
-                      color: _green,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Kembali'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Buat pesanan'),
-          ),
-        ],
       ),
     );
-    if (confirmed != true || !mounted) return;
-    final created = await widget.onCheckout(items, proof);
-    if (created && mounted) {
-      setState(() {
-        _cart.clear();
-        _paymentProof = null;
-      });
-    }
+    if (order == null || !mounted) return;
+    setState(_cart.clear);
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => _OrderDetailScreen(order: order),
+      ),
+    );
   }
 
   void _showOrderUnavailable() {
@@ -3175,7 +4340,9 @@ class _NotificationsTabState extends State<_NotificationsTab> {
           pendingOrders.isEmpty
               ? 'Pesanan baru akan muncul di sini.'
               : 'Pembayaran diterima dari ${pendingOrders.first.customerName}. Segera proses pesanan.',
-          pendingOrders.isEmpty ? 'Hari ini' : _formatDate(pendingOrders.first.date),
+          pendingOrders.isEmpty
+              ? 'Hari ini'
+              : _formatDate(pendingOrders.first.date),
           pendingOrders.isNotEmpty,
         ),
         (
@@ -3306,7 +4473,7 @@ class _NotificationsTabState extends State<_NotificationsTab> {
                 final order = widget.role == SihamaRole.mitraToko
                     ? (pendingOrders.isEmpty ? null : pendingOrders.first)
                     : trackedOrder ??
-                        (pendingOrders.isEmpty ? null : pendingOrders.first);
+                          (pendingOrders.isEmpty ? null : pendingOrders.first);
                 if (order != null) widget.onOpenOrder(order);
               } else if (notice.$1 == Icons.chat_bubble_outline_rounded) {
                 widget.onOpenChat();
@@ -3388,7 +4555,9 @@ class _NotificationsTabState extends State<_NotificationsTab> {
 }
 
 class _DiseaseDatabaseTab extends StatefulWidget {
-  const _DiseaseDatabaseTab();
+  const _DiseaseDatabaseTab({required this.repository});
+
+  final SihamaRepository repository;
 
   @override
   State<_DiseaseDatabaseTab> createState() => _DiseaseDatabaseTabState();
@@ -3396,28 +4565,16 @@ class _DiseaseDatabaseTab extends StatefulWidget {
 
 class _DiseaseDatabaseTabState extends State<_DiseaseDatabaseTab> {
   final _searchController = TextEditingController();
-  String _cropFilter = 'Semua';
+  List<DiagnosisReference> _entries = [];
+  String _categoryFilter = 'Semua';
+  bool _loading = true;
+  Object? _loadError;
 
-  final List<(String, String, String, IconData)> _entries = [
-    (
-      'Padi',
-      'Hawar Daun Bakteri',
-      'Daun menguning dari ujung, lalu mengering.',
-      Icons.grass_rounded,
-    ),
-    (
-      'Cabai',
-      'Antraknosa',
-      'Bercak cekung gelap pada buah dan batang.',
-      Icons.spa_outlined,
-    ),
-    (
-      'Tomat',
-      'Layu Fusarium',
-      'Daun layu bertahap dan menguning dari bawah.',
-      Icons.eco_outlined,
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _loadEntries();
+  }
 
   @override
   void dispose() {
@@ -3425,27 +4582,139 @@ class _DiseaseDatabaseTabState extends State<_DiseaseDatabaseTab> {
     super.dispose();
   }
 
-  Future<void> _editEntry((String, String, String, IconData) entry) async {
-    final updated = await showDialog<(String, String, String, IconData)>(
+  Future<void> _loadEntries() async {
+    try {
+      final entries = await widget.repository.getDiagnosisReferences();
+      if (!mounted) return;
+      setState(() {
+        _entries = entries;
+        _loadError = null;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loadError = error;
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _refreshEntries() async {
+    final entries = await widget.repository.getDiagnosisReferences();
+    if (!mounted) return;
+    setState(() {
+      _entries = entries;
+      _loadError = null;
+    });
+  }
+
+  Future<void> _editEntry([DiagnosisReference? entry]) async {
+    final updated = await showDialog<DiagnosisReference>(
       context: context,
-      builder: (_) => _DiseaseEditDialog(entry: entry),
+      builder: (_) => _DiagnosisReferenceDialog(entry: entry),
     );
     if (updated == null) return;
-    final index = _entries.indexOf(entry);
-    if (index >= 0) setState(() => _entries[index] = updated);
+    try {
+      if (entry == null) {
+        await widget.repository.createDiagnosisReference(updated);
+      } else {
+        await widget.repository.updateDiagnosisReference(updated);
+      }
+      await _refreshEntries();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            entry == null
+                ? 'Referensi diagnosis berhasil ditambahkan.'
+                : 'Referensi diagnosis berhasil diperbarui.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal menyimpan referensi: $error')),
+      );
+    }
+  }
+
+  Future<void> _deleteEntry(DiagnosisReference entry) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Hapus referensi diagnosis?'),
+        content: Text('Data "${entry.name}" akan dihapus permanen.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Hapus'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await widget.repository.deleteDiagnosisReference(entry.slug);
+      await _refreshEntries();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Referensi diagnosis berhasil dihapus.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal menghapus referensi: $error')),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_loadError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Basis data diagnosis gagal dimuat.'),
+              const SizedBox(height: 8),
+              Text('$_loadError', textAlign: TextAlign.center),
+              const SizedBox(height: 12),
+              OutlinedButton(
+                onPressed: _loadEntries,
+                child: const Text('Coba lagi'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final query = _searchController.text.trim().toLowerCase();
+    final categories = _entries.map((entry) => entry.category).toSet().toList()
+      ..sort();
     final entries = _entries.where((entry) {
-      final matchesCrop = _cropFilter == 'Semua' || entry.$1 == _cropFilter;
-      final matchesQuery =
-          entry.$1.toLowerCase().contains(query) ||
-          entry.$2.toLowerCase().contains(query) ||
-          entry.$3.toLowerCase().contains(query);
-      return matchesCrop && matchesQuery;
-    });
+      final matchesCategory =
+          _categoryFilter == 'Semua' || entry.category == _categoryFilter;
+      final searchableText = [
+        entry.name,
+        entry.category,
+        entry.shortDescription,
+        entry.firstSymptoms,
+        entry.typicalCauses,
+      ].join(' ').toLowerCase();
+      return matchesCategory && searchableText.contains(query);
+    }).toList();
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 22, 18, 28),
@@ -3453,158 +4722,390 @@ class _DiseaseDatabaseTabState extends State<_DiseaseDatabaseTab> {
         const _PageHeading(
           eyebrow: 'Referensi penyuluh',
           title: 'Basis Data Gejala-Penyakit',
-          subtitle: 'Cari referensi gejala dan penyakit berdasarkan tanaman.',
+          subtitle:
+              'Referensi awal cannabis dari dataset. Data dapat ditambah dan '
+              'dikelola melalui basis data.',
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerRight,
+          child: FilledButton.icon(
+            onPressed: () => _editEntry(),
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('Tambah referensi'),
+          ),
+        ),
+        const SizedBox(height: 10),
         TextField(
           controller: _searchController,
           onChanged: (_) => setState(() {}),
-          decoration: _inputDecoration('Cari gejala atau penyakit').copyWith(
-            prefixIcon: const Icon(Icons.search_rounded, color: _muted),
-          ),
+          decoration: _inputDecoration('Cari nama, kategori, atau gejala')
+              .copyWith(
+                prefixIcon: const Icon(Icons.search_rounded, color: _muted),
+              ),
         ),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 8,
-          children: ['Semua', 'Padi', 'Cabai', 'Tomat']
-              .map(
-                (crop) => _CategoryChip(
-                  label: crop,
-                  selected: crop == _cropFilter,
-                  onTap: () => setState(() => _cropFilter = crop),
-                ),
-              )
-              .toList(),
+        const SizedBox(height: 8),
+        Text(
+          '${_entries.length} referensi tersedia',
+          style: const TextStyle(color: _muted, fontSize: 12),
         ),
-        const SizedBox(height: 14),
-        ...entries.map(
-          (entry) => Container(
-            margin: const EdgeInsets.only(bottom: 10),
-            padding: const EdgeInsets.all(15),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                CircleAvatar(
-                  backgroundColor: const Color(0xFFE7F2ED),
-                  child: Icon(entry.$4, color: _green),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        entry.$1,
-                        style: const TextStyle(
-                          color: _green,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        entry.$2,
-                        style: const TextStyle(
-                          color: _ink,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 5),
-                      Text(
-                        entry.$3,
-                        style: const TextStyle(color: _muted, height: 1.35),
-                      ),
-                    ],
+        const SizedBox(height: 10),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: ['Semua', ...categories].map((category) {
+              final selected = _categoryFilter == category;
+              return Padding(
+                padding: const EdgeInsets.only(right: 7),
+                child: ChoiceChip(
+                  label: Text(_diagnosisCategoryLabel(category)),
+                  selected: selected,
+                  onSelected: (_) => setState(() => _categoryFilter = category),
+                  selectedColor: _green,
+                  labelStyle: TextStyle(
+                    color: selected ? Colors.white : _ink,
+                    fontSize: 11,
                   ),
                 ),
-                IconButton(
-                  tooltip: 'Ubah data penyakit',
-                  onPressed: () => _editEntry(entry),
-                  icon: const Icon(Icons.edit_outlined, color: _green, size: 19),
+              );
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 14),
+        if (entries.isEmpty)
+          const _EmptyState(
+            icon: Icons.search_off_rounded,
+            title: 'Referensi tidak ditemukan',
+            message: 'Coba kata kunci atau kategori lain.',
+          ),
+        ...entries.map(
+          (entry) => Card(
+            margin: const EdgeInsets.only(bottom: 10),
+            clipBehavior: Clip.antiAlias,
+            child: ExpansionTile(
+              leading: CircleAvatar(
+                backgroundColor: const Color(0xFFE7F2ED),
+                child: Icon(
+                  _diagnosisCategoryIcon(entry.category),
+                  color: _green,
+                ),
+              ),
+              title: Text(
+                entry.name,
+                style: const TextStyle(
+                  color: _ink,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              subtitle: Text(
+                _diagnosisCategoryLabel(entry.category),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: _muted, fontSize: 11),
+              ),
+              childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+              children: [
+                _DiagnosisDetail(
+                  label: 'Deskripsi',
+                  value: entry.shortDescription,
+                ),
+                _DiagnosisDetail(
+                  label: 'Gejala awal',
+                  value: entry.firstSymptoms,
+                  splitSemicolon: true,
+                ),
+                _DiagnosisDetail(
+                  label: 'Bagian tanaman terdampak',
+                  value: entry.affectedPlantParts,
+                  splitSemicolon: true,
+                ),
+                _DiagnosisDetail(
+                  label: 'Fase pertumbuhan',
+                  value: entry.growthPhase,
+                  splitSemicolon: true,
+                ),
+                _DiagnosisDetail(
+                  label: 'Kemungkinan penyebab',
+                  value: entry.typicalCauses,
+                  splitSemicolon: true,
+                ),
+                _DiagnosisDetail(
+                  label: 'Referensi sumber',
+                  value: entry.moreInfo,
+                  splitSemicolon: true,
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () => _editEntry(entry),
+                      icon: const Icon(Icons.edit_outlined, size: 17),
+                      label: const Text('Ubah'),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => _deleteEntry(entry),
+                      icon: const Icon(Icons.delete_outline, size: 17),
+                      label: const Text('Hapus'),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
         ),
-        const _PrototypeNote(),
       ],
     );
   }
 }
 
-class _DiseaseEditDialog extends StatefulWidget {
-  const _DiseaseEditDialog({required this.entry});
-  final (String, String, String, IconData) entry;
+class _DiagnosisDetail extends StatelessWidget {
+  const _DiagnosisDetail({
+    required this.label,
+    required this.value,
+    this.splitSemicolon = false,
+  });
+
+  final String label;
+  final String value;
+  final bool splitSemicolon;
 
   @override
-  State<_DiseaseEditDialog> createState() => _DiseaseEditDialogState();
+  Widget build(BuildContext context) {
+    if (value.trim().isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: SizedBox(
+        width: double.infinity,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                label,
+                textAlign: TextAlign.left,
+                style: const TextStyle(
+                  color: _green,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(height: 3),
+            ..._displayItems.map(
+              (item) => Padding(
+                padding: EdgeInsets.only(
+                  left: splitSemicolon && _displayItems.length > 1 ? 2 : 0,
+                  bottom: splitSemicolon && _displayItems.length > 1 ? 4 : 0,
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (splitSemicolon && _displayItems.length > 1) ...[
+                      const Padding(
+                        padding: EdgeInsets.only(top: 7, right: 7),
+                        child: Icon(Icons.circle, size: 5, color: _green),
+                      ),
+                    ],
+                    Expanded(
+                      child: SelectionArea(
+                        child: Text(
+                          item,
+                          softWrap: true,
+                          textAlign: TextAlign.left,
+                          style: const TextStyle(color: _ink, height: 1.4),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<String> get _displayItems =>
+      splitSemicolon ? _splitSemicolonItems(value) : [value.trim()];
 }
 
-class _DiseaseEditDialogState extends State<_DiseaseEditDialog> {
-  late final _nameController = TextEditingController(text: widget.entry.$2);
-  late final _descriptionController = TextEditingController(
-    text: widget.entry.$3,
+class _DiagnosisReferenceDialog extends StatefulWidget {
+  const _DiagnosisReferenceDialog({this.entry});
+
+  final DiagnosisReference? entry;
+
+  @override
+  State<_DiagnosisReferenceDialog> createState() =>
+      _DiagnosisReferenceDialogState();
+}
+
+class _DiagnosisReferenceDialogState extends State<_DiagnosisReferenceDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final _slugController = TextEditingController(
+    text: widget.entry?.slug ?? '',
   );
-  late String _crop = widget.entry.$1;
+  late final _nameController = TextEditingController(
+    text: widget.entry?.name ?? '',
+  );
+  late final _categoryController = TextEditingController(
+    text: widget.entry?.category ?? '',
+  );
+  late final _descriptionController = TextEditingController(
+    text: widget.entry?.shortDescription ?? '',
+  );
+  late final _affectedPartsController = TextEditingController(
+    text: widget.entry?.affectedPlantParts ?? '',
+  );
+  late final _growthPhaseController = TextEditingController(
+    text: widget.entry?.growthPhase ?? '',
+  );
+  late final _symptomsController = TextEditingController(
+    text: widget.entry?.firstSymptoms ?? '',
+  );
+  late final _causesController = TextEditingController(
+    text: widget.entry?.typicalCauses ?? '',
+  );
+  late final _moreInfoController = TextEditingController(
+    text: widget.entry?.moreInfo ?? '',
+  );
 
   @override
   void dispose() {
+    _slugController.dispose();
     _nameController.dispose();
+    _categoryController.dispose();
     _descriptionController.dispose();
+    _affectedPartsController.dispose();
+    _growthPhaseController.dispose();
+    _symptomsController.dispose();
+    _causesController.dispose();
+    _moreInfoController.dispose();
     super.dispose();
+  }
+
+  TextFormField _field(
+    TextEditingController controller,
+    String label, {
+    bool required = false,
+    int maxLines = 1,
+    bool readOnly = false,
+    String? Function(String?)? validator,
+  }) => TextFormField(
+    controller: controller,
+    readOnly: readOnly,
+    minLines: maxLines == 1 ? null : 2,
+    maxLines: maxLines,
+    decoration: InputDecoration(labelText: label),
+    validator:
+        validator ??
+        (required
+            ? (value) =>
+                  value == null || value.trim().isEmpty ? 'Wajib diisi.' : null
+            : null),
+  );
+
+  void _save() {
+    if (!_formKey.currentState!.validate()) return;
+    Navigator.pop(
+      context,
+      DiagnosisReference(
+        slug: _slugController.text.trim(),
+        name: _nameController.text.trim(),
+        category: _categoryController.text.trim(),
+        shortDescription: _descriptionController.text.trim(),
+        affectedPlantParts: _affectedPartsController.text.trim(),
+        growthPhase: _growthPhaseController.text.trim(),
+        firstSymptoms: _symptomsController.text.trim(),
+        typicalCauses: _causesController.text.trim(),
+        moreInfo: _moreInfoController.text.trim(),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Ubah data penyakit'),
-    content: SingleChildScrollView(
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        DropdownButtonFormField<String>(
-          value: _crop,
-          decoration: const InputDecoration(labelText: 'Komoditas'),
-          items: ['Padi', 'Cabai', 'Tomat']
-              .map((crop) => DropdownMenuItem(value: crop, child: Text(crop)))
-              .toList(),
-          onChanged: (value) => setState(() => _crop = value ?? _crop),
+    title: Text(
+      widget.entry == null
+          ? 'Tambah referensi diagnosis'
+          : 'Ubah referensi diagnosis',
+    ),
+    content: SizedBox(
+      width: 520,
+      child: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _field(
+                _slugController,
+                'Slug (ID unik, contoh: powdery-mildew)',
+                required: true,
+                readOnly: widget.entry != null,
+                validator: (value) {
+                  final slug = value?.trim() ?? '';
+                  if (slug.isEmpty) return 'Wajib diisi.';
+                  if (!RegExp(r'^[a-z0-9]+(?:-[a-z0-9]+)*$').hasMatch(slug)) {
+                    return 'Gunakan huruf kecil, angka, dan tanda hubung.';
+                  }
+                  return null;
+                },
+              ),
+              _field(_nameController, 'Nama', required: true),
+              _field(_categoryController, 'Kategori', required: true),
+              _field(_descriptionController, 'Deskripsi', maxLines: 4),
+              _field(_symptomsController, 'Gejala awal', maxLines: 4),
+              _field(
+                _affectedPartsController,
+                'Bagian tanaman terdampak',
+                maxLines: 2,
+              ),
+              _field(_growthPhaseController, 'Fase pertumbuhan'),
+              _field(_causesController, 'Kemungkinan penyebab', maxLines: 4),
+              _field(
+                _moreInfoController,
+                'Referensi URL (pisahkan dengan titik koma)',
+                maxLines: 3,
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: _nameController,
-          decoration: const InputDecoration(labelText: 'Nama hama/penyakit'),
-        ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: _descriptionController,
-          minLines: 2,
-          maxLines: 4,
-          decoration: const InputDecoration(labelText: 'Deskripsi/gejala'),
-        ),
-      ]),
+      ),
     ),
     actions: [
       TextButton(
         onPressed: () => Navigator.pop(context),
         child: const Text('Batal'),
       ),
-      FilledButton(
-        onPressed: () {
-          final name = _nameController.text.trim();
-          final description = _descriptionController.text.trim();
-          if (name.isEmpty || description.isEmpty) return;
-          Navigator.pop(
-            context,
-            (_crop, name, description, widget.entry.$4),
-          );
-        },
-        child: const Text('Simpan'),
-      ),
+      FilledButton(onPressed: _save, child: const Text('Simpan')),
     ],
   );
 }
+
+List<String> _splitSemicolonItems(String value) => value
+    .split(';')
+    .map((item) => item.trim())
+    .where((item) => item.isNotEmpty)
+    .toList();
+
+String _formatSemicolonList(String value) {
+  final items = _splitSemicolonItems(value);
+  if (items.length <= 1) return items.isEmpty ? '' : items.first;
+  return items.map((item) => '• $item').join('\n');
+}
+
+String _diagnosisCategoryLabel(String category) => category;
+
+IconData _diagnosisCategoryIcon(String category) => switch (category) {
+  'Hama' => Icons.pest_control_outlined,
+  'Kekurangan nutrisi' || 'Kelebihan nutrisi' => Icons.eco_outlined,
+  'Masalah pengairan' => Icons.water_drop_outlined,
+  'Stres cahaya' => Icons.light_mode_outlined,
+  _ => Icons.grass_rounded,
+};
 
 class _ShopOrdersTab extends StatefulWidget {
   const _ShopOrdersTab({required this.orders, required this.onUpdateOrder});
@@ -3629,8 +5130,18 @@ class _ShopOrdersTabState extends State<_ShopOrdersTab> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
       children: [
-        const Text('Pesanan Masuk', style: TextStyle(color: _ink, fontSize: 19, fontWeight: FontWeight.w800)),
-        const Text('Toko Tani Makmur', style: TextStyle(color: _muted, fontSize: 10)),
+        const Text(
+          'Pesanan Masuk',
+          style: TextStyle(
+            color: _ink,
+            fontSize: 19,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const Text(
+          'Toko Tani Makmur',
+          style: TextStyle(color: _muted, fontSize: 10),
+        ),
         const SizedBox(height: 12),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
@@ -3640,7 +5151,13 @@ class _ShopOrdersTabState extends State<_ShopOrdersTab> {
                   (status) => Padding(
                     padding: const EdgeInsets.only(right: 7),
                     child: ChoiceChip(
-                      label: Text(status, style: TextStyle(fontSize: 11, color: _statusFilter == status ? Colors.white : _ink)),
+                      label: Text(
+                        status,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: _statusFilter == status ? Colors.white : _ink,
+                        ),
+                      ),
                       selected: _statusFilter == status,
                       showCheckmark: false,
                       selectedColor: const Color(0xFF25833E),
@@ -3661,24 +5178,26 @@ class _ShopOrdersTabState extends State<_ShopOrdersTab> {
             title: 'Belum ada pesanan',
             message: 'Pesanan baru dari petani akan muncul di sini.',
           ),
-        ...orders.map((order) => _ShopOrderCard(
-              order: order,
-              onTap: () => _showOrderDetails(order),
-            )),
+        ...orders.map(
+          (order) => _ShopOrderCard(
+            order: order,
+            onTap: () => _showOrderDetails(order),
+          ),
+        ),
       ],
     );
   }
 
   Future<void> _showOrderDetails(MarketOrder order) {
-    return Navigator.of(context).push<void>(MaterialPageRoute<void>(
-      builder: (_) => _ShopOrderDetailScreen(
-        order: order,
-        onUpdateOrder: widget.onUpdateOrder,
+    return Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => _ShopOrderDetailScreen(
+          order: order,
+          onUpdateOrder: widget.onUpdateOrder,
+        ),
       ),
-    ));
+    );
   }
-
-
 }
 
 class _ShopOrderCard extends StatelessWidget {
@@ -3706,9 +5225,14 @@ class _ShopOrderCard extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: Text(order.customerName, style: const TextStyle(
-                    color: _ink, fontSize: 12, fontWeight: FontWeight.w800,
-                  )),
+                  child: Text(
+                    order.customerName,
+                    style: const TextStyle(
+                      color: _ink,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                 ),
                 _StatusBadge(status: order.status),
               ],
@@ -3722,12 +5246,19 @@ class _ShopOrderCard extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: Text('${order.items.length} item',
-                    style: const TextStyle(color: _muted, fontSize: 10)),
+                  child: Text(
+                    '${order.items.length} item',
+                    style: const TextStyle(color: _muted, fontSize: 10),
+                  ),
                 ),
-                Text(_formatPrice(order.total), style: const TextStyle(
-                  color: Color(0xFF18834A), fontSize: 12, fontWeight: FontWeight.w800,
-                )),
+                Text(
+                  _formatPrice(order.total),
+                  style: const TextStyle(
+                    color: Color(0xFF18834A),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
               ],
             ),
           ],
@@ -3738,7 +5269,10 @@ class _ShopOrderCard extends StatelessWidget {
 }
 
 class _ShopOrderDetailScreen extends StatelessWidget {
-  const _ShopOrderDetailScreen({required this.order, required this.onUpdateOrder});
+  const _ShopOrderDetailScreen({
+    required this.order,
+    required this.onUpdateOrder,
+  });
 
   final MarketOrder order;
   final Future<bool> Function(MarketOrder order, String status) onUpdateOrder;
@@ -3759,98 +5293,308 @@ class _ShopOrderDetailScreen extends StatelessWidget {
         backgroundColor: Colors.white,
         foregroundColor: _ink,
         elevation: 0,
-        title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Pesanan ${order.id}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-          Text('${order.customerName} · ${_formatDate(order.date).split(' - ').first}', style: const TextStyle(fontSize: 10, color: _muted)),
-        ]),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Pesanan ${order.id}',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+            ),
+            Text(
+              '${order.customerName} · ${_formatDate(order.date).split(' - ').first}',
+              style: const TextStyle(fontSize: 10, color: _muted),
+            ),
+          ],
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
         children: [
-          Row(children: [
-            const Expanded(child: Text('Status', style: TextStyle(color: _ink, fontWeight: FontWeight.w800))),
-            _StatusBadge(status: order.status),
-          ]),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Status',
+                  style: TextStyle(color: _ink, fontWeight: FontWeight.w800),
+                ),
+              ),
+              _StatusBadge(status: order.status),
+            ],
+          ),
           const SizedBox(height: 8),
-          _DetailCard(title: 'Rincian pesanan', child: Column(children: [
-            ...order.items.map((item) => Padding(
-              padding: const EdgeInsets.only(bottom: 9),
-              child: Row(children: [
-                Expanded(child: Text('${item.productName} × ${item.quantity}', style: const TextStyle(color: _muted, fontSize: 11))),
-                Text(_formatPrice(item.total), style: const TextStyle(color: _ink, fontSize: 11, fontWeight: FontWeight.w700)),
-              ]),
-            )),
-            const Divider(),
-            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              const Text('Total', style: TextStyle(color: _ink, fontWeight: FontWeight.w700)),
-              Text(_formatPrice(order.total), style: const TextStyle(color: Color(0xFF18834A), fontWeight: FontWeight.w800)),
-            ]),
-          ])),
+          _DetailCard(
+            title: 'Rincian pesanan',
+            child: Column(
+              children: [
+                ...order.items.map(
+                  (item) => Padding(
+                    padding: const EdgeInsets.only(bottom: 9),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item.productName,
+                          style: const TextStyle(
+                            color: _ink,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '${item.quantity} × ${_formatPrice(item.unitPrice)}',
+                                style: const TextStyle(
+                                  color: _muted,
+                                  fontSize: 10,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              _formatPrice(item.total),
+                              style: const TextStyle(
+                                color: _ink,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const Divider(),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Total',
+                      style: TextStyle(
+                        color: _ink,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      _formatPrice(order.total),
+                      style: const TextStyle(
+                        color: Color(0xFF18834A),
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 12),
-          const Text('Bukti transfer', style: TextStyle(color: _ink, fontSize: 12, fontWeight: FontWeight.w800)),
+          _DetailCard(
+            title: 'Penerima & alamat pengiriman',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  order.customerName,
+                  style: const TextStyle(
+                    color: _ink,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  order.customerPhone.isEmpty
+                      ? 'Kontak belum diisi'
+                      : order.customerPhone,
+                  style: const TextStyle(color: _muted, fontSize: 10),
+                ),
+                const SizedBox(height: 7),
+                Text(
+                  order.deliveryAddress.isEmpty
+                      ? 'Alamat belum diisi'
+                      : order.deliveryAddress,
+                  style: const TextStyle(
+                    color: _ink,
+                    fontSize: 11,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Bukti transfer',
+            style: TextStyle(
+              color: _ink,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
           const SizedBox(height: 7),
           Container(
             height: 116,
-            decoration: BoxDecoration(borderRadius: BorderRadius.circular(14), gradient: const LinearGradient(colors: [Color(0xFFD7F0D3), Color(0xFFB8DF9B)])),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              gradient: const LinearGradient(
+                colors: [Color(0xFFD7F0D3), Color(0xFFB8DF9B)],
+              ),
+            ),
             child: order.transferProofBytes == null
-                ? const Center(child: Text('Bukti transfer belum tersedia', style: TextStyle(color: _green, fontSize: 10)))
+                ? const Center(
+                    child: Text(
+                      'Bukti transfer belum tersedia',
+                      style: TextStyle(color: _green, fontSize: 10),
+                    ),
+                  )
                 : ClipRRect(
                     borderRadius: BorderRadius.circular(14),
-                    child: Image.memory(order.transferProofBytes!, fit: BoxFit.cover),
+                    child: Image.memory(
+                      order.transferProofBytes!,
+                      fit: BoxFit.cover,
+                    ),
                   ),
           ),
           const SizedBox(height: 12),
-          const Text('Perjalanan pesanan', style: TextStyle(color: _ink, fontSize: 12, fontWeight: FontWeight.w800)),
+          const Text(
+            'Perjalanan pesanan',
+            style: TextStyle(
+              color: _ink,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
           const SizedBox(height: 7),
-          _DetailCard(title: 'Status pesanan', child: Column(children: [
-            ...List.generate(steps.length, (index) {
-              final reached = active >= 0 && index <= active;
-              final current = index == active;
-              return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                SizedBox(width: 26, child: Column(children: [
-                  Container(width: 20, height: 20, decoration: BoxDecoration(color: reached ? const Color(0xFF25833E) : const Color(0xFFE3EAE4), shape: BoxShape.circle), child: Icon(index < active ? Icons.check_rounded : Icons.circle, size: 11, color: reached ? Colors.white : _muted)),
-                  if (index < steps.length - 1) Container(width: 2, height: 24, color: index < active ? const Color(0xFF25833E) : const Color(0xFFE3EAE4)),
-                ])),
-                const SizedBox(width: 8),
-                Padding(padding: const EdgeInsets.only(top: 3), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(steps[index], style: TextStyle(color: reached ? _ink : _muted, fontSize: 11, fontWeight: current ? FontWeight.w800 : FontWeight.w600)),
-                  if (current) const Text('Status saat ini', style: TextStyle(color: _muted, fontSize: 9)),
-                ])),
-              ]);
-            }),
-            if (order.status == 'Dibatalkan') const Align(alignment: Alignment.centerLeft, child: Text('Pesanan dibatalkan', style: TextStyle(color: Color(0xFF9B4038), fontSize: 11))),
-          ])),
+          _DetailCard(
+            title: 'Status pesanan',
+            child: Column(
+              children: [
+                ...List.generate(steps.length, (index) {
+                  final reached = active >= 0 && index <= active;
+                  final current = index == active;
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 26,
+                        child: Column(
+                          children: [
+                            Container(
+                              width: 20,
+                              height: 20,
+                              decoration: BoxDecoration(
+                                color: reached
+                                    ? const Color(0xFF25833E)
+                                    : const Color(0xFFE3EAE4),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                index < active
+                                    ? Icons.check_rounded
+                                    : Icons.circle,
+                                size: 11,
+                                color: reached ? Colors.white : _muted,
+                              ),
+                            ),
+                            if (index < steps.length - 1)
+                              Container(
+                                width: 2,
+                                height: 24,
+                                color: index < active
+                                    ? const Color(0xFF25833E)
+                                    : const Color(0xFFE3EAE4),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 3),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              steps[index],
+                              style: TextStyle(
+                                color: reached ? _ink : _muted,
+                                fontSize: 11,
+                                fontWeight: current
+                                    ? FontWeight.w800
+                                    : FontWeight.w600,
+                              ),
+                            ),
+                            if (current)
+                              const Text(
+                                'Status saat ini',
+                                style: TextStyle(color: _muted, fontSize: 9),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                }),
+                if (order.status == 'Dibatalkan')
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Pesanan dibatalkan',
+                      style: TextStyle(color: Color(0xFF9B4038), fontSize: 11),
+                    ),
+                  ),
+              ],
+            ),
+          ),
           if (nextStatus != null) ...[
             const SizedBox(height: 14),
-            SizedBox(height: 46, child: FilledButton(
-              onPressed: () async {
-                final saved = await onUpdateOrder(order, nextStatus);
-                if (saved && context.mounted) Navigator.of(context).pop();
-              },
-              child: Text(switch (nextStatus) {
-                'Diproses' => 'Konfirmasi pesanan',
-                'Dikirim' => 'Tandai dikirim',
-                _ => 'Tandai selesai',
-              }),
-            )),
+            SizedBox(
+              height: 46,
+              child: FilledButton(
+                onPressed: () async {
+                  final saved = await onUpdateOrder(order, nextStatus);
+                  if (saved && context.mounted) Navigator.of(context).pop();
+                },
+                child: Text(switch (nextStatus) {
+                  'Diproses' => 'Konfirmasi pesanan',
+                  'Dikirim' => 'Tandai dikirim',
+                  _ => 'Tandai selesai',
+                }),
+              ),
+            ),
           ],
           if (order.status == 'Dipesan' || order.status == 'Diproses')
             TextButton(
               onPressed: () async {
-                final cancel = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
-                  title: const Text('Batalkan pesanan?'),
-                  content: const Text('Stok produk akan dikembalikan ke katalog toko.'),
-                  actions: [
-                    TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Kembali')),
-                    FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Batalkan')),
-                  ],
-                ));
+                final cancel = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Batalkan pesanan?'),
+                    content: const Text(
+                      'Stok produk akan dikembalikan ke katalog toko.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Kembali'),
+                      ),
+                      FilledButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('Batalkan'),
+                      ),
+                    ],
+                  ),
+                );
                 if (cancel == true && context.mounted) {
                   final saved = await onUpdateOrder(order, 'Dibatalkan');
                   if (saved && context.mounted) Navigator.of(context).pop();
                 }
               },
-              child: const Text('Batalkan pesanan', style: TextStyle(color: Color(0xFF9B4038))),
+              child: const Text(
+                'Batalkan pesanan',
+                style: TextStyle(color: Color(0xFF9B4038)),
+              ),
             ),
         ],
       ),
@@ -4110,7 +5854,9 @@ class _ProfileTab extends StatelessWidget {
               foregroundColor: const Color(0xFF9B4038),
               minimumSize: const Size.fromHeight(50),
               side: const BorderSide(color: Color(0xFFE8D6D4)),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
             ),
             icon: const Icon(Icons.delete_outline_rounded),
             label: const Text('Hapus akun'),
@@ -4350,12 +6096,65 @@ class _StatusBadge extends StatelessWidget {
   }
 }
 
+class _MarketSectionHeading extends StatelessWidget {
+  const _MarketSectionHeading({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) => Text(
+    title,
+    style: const TextStyle(
+      color: _ink,
+      fontSize: 16,
+      fontWeight: FontWeight.w800,
+    ),
+  );
+}
+
+class _MarketRecommendationNote extends StatelessWidget {
+  const _MarketRecommendationNote();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFFAF0),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.eco_outlined, color: Color(0xFF1E6A30), size: 16),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Direkomendasikan penyuluh untuk diagnosis Anda. Obat lain tetap tersedia, tetapi tidak direkomendasikan untuk kasus ini.',
+              style: TextStyle(
+                color: Color(0xFF1E6A30),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ProductCard extends StatelessWidget {
   const _ProductCard({
     required this.product,
     required this.canOrder,
     required this.canManage,
+    required this.isRecommended,
+    required this.showRecommendationBadge,
+    required this.quantity,
     required this.onOrder,
+    required this.onRemoveFromCart,
     required this.onChangeStock,
     required this.onEdit,
     required this.onDelete,
@@ -4364,7 +6163,11 @@ class _ProductCard extends StatelessWidget {
   final MarketProduct product;
   final bool canOrder;
   final bool canManage;
+  final bool isRecommended;
+  final bool showRecommendationBadge;
+  final int quantity;
   final VoidCallback onOrder;
+  final VoidCallback onRemoveFromCart;
   final ValueChanged<int> onChangeStock;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
@@ -4375,70 +6178,118 @@ class _ProductCard extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 74,
-            height: 74,
-            decoration: BoxDecoration(
-              color: _productColor(product.category),
-              borderRadius: BorderRadius.circular(17),
-            ),
-            child: product.photoBytes == null
-                ? Icon(_productIcon(product.category), size: 34, color: _green)
-                : ClipRRect(
-                    borderRadius: BorderRadius.circular(17),
-                    child: Image.memory(product.photoBytes!, fit: BoxFit.cover),
-                  ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isRecommended
+              ? const Color(0xFF25813A)
+              : const Color(0xFFE1E8E2),
+          width: isRecommended ? 2 : 1,
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0D1E3C23),
+            blurRadius: 2,
+            offset: Offset(0, 1),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  product.category,
-                  style: const TextStyle(color: _muted, fontSize: 11),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              if (!canManage && showRecommendationBadge)
+                _ProductRecommendationBadge(isRecommended: isRecommended),
+              const Spacer(),
+              if (canManage)
+                PopupMenuButton<_CrudAction>(
+                  tooltip: 'Aksi produk',
+                  onSelected: (action) {
+                    if (action == _CrudAction.edit) {
+                      onEdit();
+                    } else {
+                      onDelete();
+                    }
+                  },
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(
+                      value: _CrudAction.edit,
+                      child: Text('Edit produk'),
+                    ),
+                    PopupMenuItem(
+                      value: _CrudAction.delete,
+                      child: Text('Hapus produk'),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  product.name,
-                  style: const TextStyle(
-                    color: _ink,
-                    fontWeight: FontWeight.w700,
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Container(
+                width: 70,
+                height: 70,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFD7F0DA), Color(0xFFC9E4A8)],
                   ),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  _formatPrice(product.price),
-                  style: const TextStyle(
-                    color: _green,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                if (canManage)
-                  Row(
-                    children: [
-                      const Expanded(child: Text('Stok', style: TextStyle(color: _muted, fontSize: 10))),
-                      IconButton(
-                        visualDensity: VisualDensity.compact,
-                        constraints: const BoxConstraints.tightFor(width: 28, height: 28),
-                        onPressed: product.stock == 0 ? null : () => onChangeStock(product.stock - 1),
-                        icon: const Icon(Icons.remove_circle_outline, size: 17),
+                child: product.photoBytes == null
+                    ? const Icon(
+                        Icons.eco_outlined,
+                        size: 26,
+                        color: Color(0xFF1E6A30),
+                      )
+                    : ClipRRect(
+                        borderRadius: BorderRadius.circular(11),
+                        child: Image.memory(
+                          product.photoBytes!,
+                          fit: BoxFit.cover,
+                        ),
                       ),
-                      Text('${product.stock}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700)),
-                      IconButton(
-                        visualDensity: VisualDensity.compact,
-                        constraints: const BoxConstraints.tightFor(width: 28, height: 28),
-                        onPressed: () => onChangeStock(product.stock + 1),
-                        icon: const Icon(Icons.add_circle_outline, size: 17),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      product.category,
+                      style: const TextStyle(color: _muted, fontSize: 11),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      product.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF1B2A1F),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        height: 1.35,
                       ),
-                    ],
-                  ),
-                if (!canManage) Text(
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _formatPrice(product.price),
+                      style: const TextStyle(
+                        color: Color(0xFF1E6A30),
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
                   'Stok ${product.stock} · ${product.stock <= 5 ? 'Stok Menipis' : 'Tersedia'}',
                   style: TextStyle(
                     color: product.stock <= 5
@@ -4447,53 +6298,159 @@ class _ProductCard extends StatelessWidget {
                     fontSize: 11,
                   ),
                 ),
-              ],
+              ),
+              if (canManage)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _RoundMarketButton(
+                      icon: Icons.remove,
+                      tooltip: 'Kurangi stok ${product.name}',
+                      onPressed: product.stock == 0
+                          ? null
+                          : () => onChangeStock(product.stock - 1),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      child: Text(
+                        '${product.stock}',
+                        style: const TextStyle(
+                          color: _ink,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    _RoundMarketButton(
+                      icon: Icons.add,
+                      tooltip: 'Tambah stok ${product.name}',
+                      filled: true,
+                      onPressed: () => onChangeStock(product.stock + 1),
+                    ),
+                  ],
+                )
+              else
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _RoundMarketButton(
+                      icon: Icons.remove,
+                      tooltip: 'Kurangi ${product.name} dari keranjang',
+                      onPressed: quantity == 0 ? null : onRemoveFromCart,
+                    ),
+                    SizedBox(
+                      width: 32,
+                      child: Text(
+                        '$quantity',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Color(0xFF1B2A1F),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    _RoundMarketButton(
+                      icon: canOrder ? Icons.add : Icons.lock_outline_rounded,
+                      tooltip: canOrder
+                          ? product.stock == 0
+                                ? 'Stok habis'
+                                : 'Tambah ${product.name} ke keranjang'
+                          : 'Pemesanan terkunci',
+                      filled: true,
+                      onPressed: canOrder && product.stock == 0
+                          ? null
+                          : onOrder,
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProductRecommendationBadge extends StatelessWidget {
+  const _ProductRecommendationBadge({required this.isRecommended});
+
+  final bool isRecommended;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isRecommended
+        ? const Color(0xFF14612B)
+        : const Color(0xFF55645A);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: isRecommended
+            ? const Color(0xFFDCF5E1)
+            : const Color(0xFFEEF2EF),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isRecommended
+                ? Icons.eco_outlined
+                : Icons.do_not_disturb_on_outlined,
+            size: 13,
+            color: color,
+          ),
+          const SizedBox(width: 5),
+          Text(
+            isRecommended ? 'Direkomendasikan' : 'Tidak direkomendasikan',
+            style: TextStyle(
+              color: color,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(width: 6),
-          if (canManage)
-            PopupMenuButton<_CrudAction>(
-              tooltip: 'Aksi produk',
-              onSelected: (action) {
-                if (action == _CrudAction.edit) {
-                  onEdit();
-                } else {
-                  onDelete();
-                }
-              },
-              itemBuilder: (context) => const [
-                PopupMenuItem(
-                  value: _CrudAction.edit,
-                  child: Text('Edit produk'),
-                ),
-                PopupMenuItem(
-                  value: _CrudAction.delete,
-                  child: Text('Hapus produk'),
-                ),
-              ],
-            )
-          else
-            IconButton.filledTonal(
-              onPressed: canOrder && product.stock == 0 ? null : onOrder,
-              tooltip: canOrder
-                  ? product.stock == 0
-                        ? 'Stok habis'
-                        : 'Tambah ${product.name} ke keranjang'
-                  : 'Pemesanan terkunci',
-              style: IconButton.styleFrom(
-                foregroundColor: _green,
-                backgroundColor: const Color(0xFFE7F2ED),
-              ),
-              icon: Icon(
-                !canOrder
-                    ? Icons.lock_outline_rounded
-                    : product.stock == 0
-                    ? Icons.remove_shopping_cart_outlined
-                    : Icons.add_shopping_cart_rounded,
-                size: 20,
-              ),
-            ),
         ],
+      ),
+    );
+  }
+}
+
+class _RoundMarketButton extends StatelessWidget {
+  const _RoundMarketButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+    this.filled = false,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onPressed;
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 38,
+      height: 38,
+      child: Container(
+        decoration: BoxDecoration(
+          color: filled ? const Color(0xFF25813A) : Colors.white,
+          shape: BoxShape.circle,
+          border: filled ? null : Border.all(color: const Color(0xFFE1E8E2)),
+        ),
+        child: IconButton(
+          onPressed: onPressed,
+          tooltip: tooltip,
+          padding: EdgeInsets.zero,
+          style: IconButton.styleFrom(
+            foregroundColor: filled ? Colors.white : const Color(0xFF1B2A1F),
+            backgroundColor: Colors.transparent,
+            disabledForegroundColor: const Color(0xFF9AA59D),
+            shape: const CircleBorder(),
+          ),
+          icon: Icon(icon, size: 18),
+        ),
       ),
     );
   }
@@ -4701,7 +6658,9 @@ class _FallbackChatRepository implements SihamaChatRepository {
 
   @override
   Future<List<ChatMessage>> getChatMessages(String reportId) async {
-    final messages = List<ChatMessage>.of(_messagesByReport[reportId] ?? const []);
+    final messages = List<ChatMessage>.of(
+      _messagesByReport[reportId] ?? const [],
+    );
     messages.sort((a, b) => a.sentAt.compareTo(b.sentAt));
     return messages;
   }
@@ -4932,14 +6891,27 @@ class _ProductFormScreen extends StatefulWidget {
 
 class _ProductFormScreenState extends State<_ProductFormScreen> {
   final _formKey = GlobalKey<FormState>();
-  late final _nameController = TextEditingController(text: widget.product?.name ?? '');
-  late final _priceController = TextEditingController(text: widget.product?.price.toString() ?? '');
-  late final _stockController = TextEditingController(text: widget.product?.stock.toString() ?? '');
-  late final _descriptionController = TextEditingController(text: widget.product?.description ?? '');
+  late final _nameController = TextEditingController(
+    text: widget.product?.name ?? '',
+  );
+  late final _priceController = TextEditingController(
+    text: widget.product?.price.toString() ?? '',
+  );
+  late final _stockController = TextEditingController(
+    text: widget.product?.stock.toString() ?? '',
+  );
+  late final _descriptionController = TextEditingController(
+    text: widget.product?.description ?? '',
+  );
   late String _category = widget.product?.category ?? 'Fungisida';
   ReportImage? _image;
 
-  static const _categories = ['Fungisida', 'Bakterisida', 'Insektisida', 'Herbisida'];
+  static const _categories = [
+    'Fungisida',
+    'Bakterisida',
+    'Insektisida',
+    'Herbisida',
+  ];
 
   @override
   void initState() {
@@ -4963,32 +6935,42 @@ class _ProductFormScreenState extends State<_ProductFormScreen> {
       if (image == null || !mounted) return;
       final error = validateReportImage(image);
       if (error != null) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error)));
         return;
       }
       setState(() => _image = image);
     } on ReportImagePickerException catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.message)));
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Foto produk gagal dibuka: $error')));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Foto produk gagal dibuka: $error')),
+        );
     }
   }
 
   void _save() {
     if (!_formKey.currentState!.validate()) return;
     if (_image == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Unggah foto produk terlebih dahulu.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unggah foto produk terlebih dahulu.')),
+      );
       return;
     }
-    Navigator.of(context).pop(MarketProduct(
-      id: widget.product?.id,
-      name: _nameController.text.trim(),
-      category: _category,
-      price: int.parse(_priceController.text.trim()),
-      stock: int.parse(_stockController.text.trim()),
-      description: _descriptionController.text.trim(),
-      photoBytes: _image!.bytes,
-    ));
+    Navigator.of(context).pop(
+      MarketProduct(
+        id: widget.product?.id,
+        name: _nameController.text.trim(),
+        category: _category,
+        price: int.parse(_priceController.text.trim()),
+        stock: int.parse(_stockController.text.trim()),
+        description: _descriptionController.text.trim(),
+        photoBytes: _image!.bytes,
+      ),
+    );
   }
 
   @override
@@ -4998,64 +6980,173 @@ class _ProductFormScreenState extends State<_ProductFormScreen> {
       backgroundColor: Colors.white,
       foregroundColor: _ink,
       elevation: 0,
-      title: Text(widget.product == null ? 'Tambah Produk' : 'Ubah Produk', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+      title: Text(
+        widget.product == null ? 'Tambah Produk' : 'Ubah Produk',
+        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+      ),
     ),
     body: Form(
       key: _formKey,
-      child: ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 20), children: [
-        const _FormLabel('Nama produk'),
-        const SizedBox(height: 6),
-        TextFormField(controller: _nameController, decoration: _inputDecoration('Contoh: Kocide 54 WDG'), validator: _requiredValue),
-        const SizedBox(height: 14),
-        const _FormLabel('Jenis'),
-        const SizedBox(height: 6),
-        Wrap(spacing: 7, runSpacing: 6, children: _categories.map((category) => ChoiceChip(
-          label: Text(category, style: TextStyle(fontSize: 10, color: category == _category ? Colors.white : _ink)),
-          selected: category == _category,
-          showCheckmark: false,
-          selectedColor: const Color(0xFF25833E),
-          backgroundColor: Colors.white,
-          side: BorderSide.none,
-          onSelected: (_) => setState(() => _category = category),
-        )).toList()),
-        const SizedBox(height: 12),
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const _FormLabel('Harga (Rp)'), const SizedBox(height: 6),
-            TextFormField(controller: _priceController, keyboardType: TextInputType.number, decoration: _inputDecoration('Harga'), validator: (value) { final price = int.tryParse(value ?? ''); return price == null || price < 0 ? 'Masukkan harga yang valid.' : null; }),
-          ])),
-          const SizedBox(width: 10),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const _FormLabel('Stok'), const SizedBox(height: 6),
-            TextFormField(controller: _stockController, keyboardType: TextInputType.number, decoration: _inputDecoration('Jumlah'), validator: (value) { final stock = int.tryParse(value ?? ''); return stock == null || stock < 0 ? 'Masukkan stok yang valid.' : null; }),
-          ])),
-        ]),
-        const SizedBox(height: 14),
-        const _FormLabel('Deskripsi'),
-        const SizedBox(height: 6),
-        TextFormField(controller: _descriptionController, minLines: 3, maxLines: 5, decoration: _inputDecoration('Tulis kegunaan dan cara penggunaan produk'), validator: _requiredValue),
-        const SizedBox(height: 14),
-        const _FormLabel('Foto produk'),
-        const SizedBox(height: 6),
-        InkWell(
-          onTap: _pickImage,
-          borderRadius: BorderRadius.circular(13),
-          child: Container(
-            height: 126,
-            width: double.infinity,
-            decoration: BoxDecoration(color: const Color(0xFFF0F8F1), borderRadius: BorderRadius.circular(13), border: Border.all(color: const Color(0xFF71C883), width: 1.2)),
-            child: _image == null
-                ? const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.add_photo_alternate_outlined, color: _green), SizedBox(height: 5), Text('Unggah foto produk', style: TextStyle(color: _green, fontSize: 11, fontWeight: FontWeight.w700)), Text('PNG/JPG, maks. 5 MB', style: TextStyle(color: _muted, fontSize: 9))])
-                : ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.memory(_image!.bytes, fit: BoxFit.cover)),
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+        children: [
+          const _FormLabel('Nama produk'),
+          const SizedBox(height: 6),
+          TextFormField(
+            controller: _nameController,
+            decoration: _inputDecoration('Contoh: Kocide 54 WDG'),
+            validator: _requiredValue,
+          ),
+          const SizedBox(height: 14),
+          const _FormLabel('Jenis'),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 7,
+            runSpacing: 6,
+            children: _categories
+                .map(
+                  (category) => ChoiceChip(
+                    label: Text(
+                      category,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: category == _category ? Colors.white : _ink,
+                      ),
+                    ),
+                    selected: category == _category,
+                    showCheckmark: false,
+                    selectedColor: const Color(0xFF25833E),
+                    backgroundColor: Colors.white,
+                    side: BorderSide.none,
+                    onSelected: (_) => setState(() => _category = category),
+                  ),
+                )
+                .toList(),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const _FormLabel('Harga (Rp)'),
+                    const SizedBox(height: 6),
+                    TextFormField(
+                      controller: _priceController,
+                      keyboardType: TextInputType.number,
+                      decoration: _inputDecoration('Harga'),
+                      validator: (value) {
+                        final price = int.tryParse(value ?? '');
+                        return price == null || price < 0
+                            ? 'Masukkan harga yang valid.'
+                            : null;
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const _FormLabel('Stok'),
+                    const SizedBox(height: 6),
+                    TextFormField(
+                      controller: _stockController,
+                      keyboardType: TextInputType.number,
+                      decoration: _inputDecoration('Jumlah'),
+                      validator: (value) {
+                        final stock = int.tryParse(value ?? '');
+                        return stock == null || stock < 0
+                            ? 'Masukkan stok yang valid.'
+                            : null;
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          const _FormLabel('Deskripsi'),
+          const SizedBox(height: 6),
+          TextFormField(
+            controller: _descriptionController,
+            minLines: 3,
+            maxLines: 5,
+            decoration: _inputDecoration(
+              'Tulis kegunaan dan cara penggunaan produk',
+            ),
+            validator: _requiredValue,
+          ),
+          const SizedBox(height: 14),
+          const _FormLabel('Foto produk'),
+          const SizedBox(height: 6),
+          InkWell(
+            onTap: _pickImage,
+            borderRadius: BorderRadius.circular(13),
+            child: Container(
+              height: 126,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF0F8F1),
+                borderRadius: BorderRadius.circular(13),
+                border: Border.all(color: const Color(0xFF71C883), width: 1.2),
+              ),
+              child: _image == null
+                  ? const Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.add_photo_alternate_outlined, color: _green),
+                        SizedBox(height: 5),
+                        Text(
+                          'Unggah foto produk',
+                          style: TextStyle(
+                            color: _green,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        Text(
+                          'PNG/JPG, maks. 5 MB',
+                          style: TextStyle(color: _muted, fontSize: 9),
+                        ),
+                      ],
+                    )
+                  : ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.memory(_image!.bytes, fit: BoxFit.cover),
+                    ),
+            ),
+          ),
+          if (_image != null)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: _pickImage,
+                child: const Text('Ganti foto'),
+              ),
+            ),
+        ],
+      ),
+    ),
+    bottomNavigationBar: SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+        child: SizedBox(
+          height: 46,
+          child: FilledButton(
+            onPressed: _save,
+            child: Text(
+              widget.product == null ? 'Simpan Produk' : 'Simpan Perubahan',
+            ),
           ),
         ),
-        if (_image != null) Align(alignment: Alignment.centerRight, child: TextButton(onPressed: _pickImage, child: const Text('Ganti foto'))),
-      ]),
+      ),
     ),
-    bottomNavigationBar: SafeArea(child: Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      child: SizedBox(height: 46, child: FilledButton(onPressed: _save, child: Text(widget.product == null ? 'Simpan Produk' : 'Simpan Perubahan'))),
-    )),
   );
 }
 
@@ -5318,14 +7409,6 @@ IconData _productIcon(String category) {
   return Icons.grass_rounded;
 }
 
-String _suggestedDiagnosis(String crop) {
-  final normalizedCrop = crop.toLowerCase();
-  if (normalizedCrop.contains('cabai')) return 'Antraknosa';
-  if (normalizedCrop.contains('tomat')) return 'Layu Fusarium';
-  if (normalizedCrop.contains('padi')) return 'Hawar Daun Bakteri';
-  return 'perlu pemeriksaan lebih lanjut';
-}
-
 List<MarketProduct> _recommendedProducts(
   CropReport report,
   List<MarketProduct> products,
@@ -5343,13 +7426,6 @@ List<MarketProduct> _recommendedProducts(
         .toList();
   }
   return products.where((product) => product.stock > 0).take(2).toList();
-}
-
-Color _productColor(String category) {
-  if (category == 'Fungisida') return const Color(0xFFEAF0D8);
-  if (category == 'Bakterisida') return const Color(0xFFE1EAF1);
-  if (category == 'Insektisida') return const Color(0xFFF2E8D8);
-  return const Color(0xFFDDF0E4);
 }
 
 String _initials(String name) {

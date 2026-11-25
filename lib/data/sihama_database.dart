@@ -1,8 +1,10 @@
 import 'dart:convert';
 
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as path;
 import 'package:sqflite/sqflite.dart';
 
+import 'diagnosis_dataset.dart';
 import 'sihama_repository.dart';
 
 class SihamaDatabase implements SihamaRepository, SihamaChatRepository {
@@ -16,7 +18,7 @@ class SihamaDatabase implements SihamaRepository, SihamaChatRepository {
     final databasePath = path.join(await getDatabasesPath(), 'sihama.db');
     _database = await openDatabase(
       databasePath,
-      version: 8,
+      version: 12,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE reports (
@@ -44,6 +46,8 @@ class SihamaDatabase implements SihamaRepository, SihamaChatRepository {
         ''');
         await db.execute(_marketOrdersTable);
         await db.execute(_chatMessagesTable);
+        await db.execute(_diagnosisReferencesTable);
+        await db.execute(_diagnosisReferencesIndex);
         await db.execute('''
           CREATE TABLE farmer_profiles (
             id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -99,6 +103,7 @@ class SihamaDatabase implements SihamaRepository, SihamaChatRepository {
           'address': '',
         });
         await batch.commit(noResult: true);
+        await _seedDiagnosisReferences(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -143,6 +148,29 @@ class SihamaDatabase implements SihamaRepository, SihamaChatRepository {
           final batch = db.batch();
           _addSampleChatMessages(batch);
           await batch.commit(noResult: true);
+        }
+        if (oldVersion < 9) {
+          await db.execute(_diagnosisReferencesTable);
+          await db.execute(_diagnosisReferencesIndex);
+          await _seedDiagnosisReferences(db);
+        } else if (oldVersion < 10) {
+          await _migrateDiagnosisReferences(db);
+        }
+        if (oldVersion < 11) {
+          await db.update(
+            'diagnosis_references',
+            {'name': 'Agas jamur (lalat hitam media tanam)'},
+            where: 'slug = ?',
+            whereArgs: ['trauermuecken'],
+          );
+        }
+        if (oldVersion >= 4 && oldVersion < 12) {
+          await db.execute(
+            "ALTER TABLE market_orders ADD COLUMN customer_phone TEXT NOT NULL DEFAULT ''",
+          );
+          await db.execute(
+            "ALTER TABLE market_orders ADD COLUMN delivery_address TEXT NOT NULL DEFAULT ''",
+          );
         }
       },
     );
@@ -211,6 +239,41 @@ class SihamaDatabase implements SihamaRepository, SihamaChatRepository {
       whereArgs: [id],
     );
     _requireUpdated(deleted, 'Laporan');
+  }
+
+  @override
+  Future<List<DiagnosisReference>> getDiagnosisReferences() async {
+    final rows = await (await _db).query(
+      'diagnosis_references',
+      orderBy: 'category COLLATE NOCASE, name COLLATE NOCASE',
+    );
+    return rows.map(DiagnosisReference.fromMap).toList();
+  }
+
+  @override
+  Future<void> createDiagnosisReference(DiagnosisReference reference) async {
+    await (await _db).insert('diagnosis_references', reference.toMap());
+  }
+
+  @override
+  Future<void> updateDiagnosisReference(DiagnosisReference reference) async {
+    final changed = await (await _db).update(
+      'diagnosis_references',
+      reference.toMap(),
+      where: 'slug = ?',
+      whereArgs: [reference.slug],
+    );
+    _requireUpdated(changed, 'Referensi diagnosis');
+  }
+
+  @override
+  Future<void> deleteDiagnosisReference(String slug) async {
+    final deleted = await (await _db).delete(
+      'diagnosis_references',
+      where: 'slug = ?',
+      whereArgs: [slug],
+    );
+    _requireUpdated(deleted, 'Referensi diagnosis');
   }
 
   @override
@@ -367,6 +430,8 @@ class SihamaDatabase implements SihamaRepository, SihamaChatRepository {
       status TEXT NOT NULL,
       items TEXT NOT NULL,
       total INTEGER NOT NULL CHECK (total >= 0),
+      customer_phone TEXT NOT NULL DEFAULT '',
+      delivery_address TEXT NOT NULL DEFAULT '',
       transfer_proof_bytes BLOB
     )
   ''';
@@ -381,6 +446,104 @@ class SihamaDatabase implements SihamaRepository, SihamaChatRepository {
       sent_at TEXT NOT NULL
     )
   ''';
+
+  static const _diagnosisReferencesTable = '''
+    CREATE TABLE diagnosis_references (
+      slug TEXT PRIMARY KEY NOT NULL,
+      name TEXT NOT NULL,
+      category TEXT NOT NULL,
+      short_description TEXT NOT NULL DEFAULT '',
+      affected_plant_parts TEXT NOT NULL DEFAULT '',
+      growth_phase TEXT NOT NULL DEFAULT '',
+      first_symptoms TEXT NOT NULL DEFAULT '',
+      typical_causes TEXT NOT NULL DEFAULT '',
+      more_info TEXT NOT NULL DEFAULT ''
+    )
+  ''';
+
+  static const _diagnosisReferencesIndex =
+      'CREATE INDEX diagnosis_references_category_idx '
+      'ON diagnosis_references(category)';
+
+  static Future<void> _seedDiagnosisReferences(
+    DatabaseExecutor executor,
+  ) async {
+    final source = await rootBundle.loadString(DiagnosisDataset.assetPath);
+    final references = DiagnosisDataset.parse(source);
+    final batch = executor.batch();
+    for (final reference in references) {
+      batch.insert(
+        'diagnosis_references',
+        reference.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.ignore,
+      );
+    }
+    await batch.commit(noResult: true);
+  }
+
+  static Future<void> _migrateDiagnosisReferences(Database db) async {
+    final oldRows = await db.query('diagnosis_references');
+    final source = await rootBundle.loadString(DiagnosisDataset.assetPath);
+    final references = DiagnosisDataset.parse(source);
+    final translations = {
+      for (final reference in references) reference.slug: reference,
+    };
+
+    await db.execute('DROP INDEX IF EXISTS diagnosis_references_category_idx');
+    await db.execute(
+      'ALTER TABLE diagnosis_references RENAME TO diagnosis_references_legacy',
+    );
+    await db.execute(_diagnosisReferencesTable);
+    await db.execute(_diagnosisReferencesIndex);
+
+    final batch = db.batch();
+    for (final row in oldRows) {
+      final slug = row['slug']! as String;
+      final translated = translations.remove(slug);
+      batch.insert(
+        'diagnosis_references',
+        (translated ?? _referenceFromLegacyMap(row)).toMap(),
+      );
+    }
+    for (final reference in translations.values) {
+      batch.insert('diagnosis_references', reference.toMap());
+    }
+    await batch.commit(noResult: true);
+    await db.execute('DROP TABLE diagnosis_references_legacy');
+  }
+
+  static DiagnosisReference _referenceFromLegacyMap(Map<String, Object?> map) {
+    final englishName = (map['name_en'] as String?) ?? '';
+    return DiagnosisReference(
+      slug: map['slug']! as String,
+      name: englishName.isEmpty
+          ? (map['name_de'] as String?) ?? ''
+          : englishName,
+      category: _translateLegacyCategory(map['category']! as String),
+      shortDescription: map['short_description']! as String,
+      affectedPlantParts: map['affected_plant_parts']! as String,
+      growthPhase: map['growth_phase']! as String,
+      firstSymptoms: map['first_symptoms']! as String,
+      typicalCauses: map['typical_causes']! as String,
+      moreInfo: map['more_info']! as String,
+    );
+  }
+
+  static String _translateLegacyCategory(String category) => switch (category) {
+    'Krankheiten / Pilzbefall' => 'Penyakit / jamur',
+    'Schaedlinge' => 'Hama',
+    'Naehrstoffmangel' => 'Kekurangan nutrisi',
+    'Naehrstoffueberschuss' => 'Kelebihan nutrisi',
+    'Bewaesserungsprobleme' => 'Masalah pengairan',
+    'Wurzelprobleme' => 'Masalah akar',
+    'Umweltstress' => 'Stres lingkungan',
+    'Temperatur / Luftfeuchtigkeit / VPD' => 'Suhu / kelembapan / VPD',
+    'pH-/EC-Probleme' => 'Masalah pH / EC',
+    'Lichtstress' => 'Stres cahaya',
+    'Bluete-/Ernteprobleme' => 'Masalah pembungaan / panen',
+    'Wachstums- und Trainingsprobleme' => 'Masalah pertumbuhan',
+    _ => category,
+  };
 
   static void _addSampleChatMessages(Batch batch) {
     batch.insert('chat_messages', {

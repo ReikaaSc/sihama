@@ -30,8 +30,8 @@ class _SihamaAppState extends State<SihamaApp> {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1E5A46)),
-        scaffoldBackgroundColor: const Color(0xFFF7F9F6),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF25833E)),
+        scaffoldBackgroundColor: const Color(0xFFF3F7F4),
       ),
       home: _role == null
           ? AuthScreen(onAuthenticated: (role) => setState(() => _role = role))

@@ -1,14 +1,229 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:sihama/data/diagnosis_dataset.dart';
 import 'package:sihama/data/report_image.dart';
 import 'package:sihama/data/sihama_repository.dart';
 import 'package:sihama/main.dart';
+import 'package:sihama/data/sihama_role.dart';
+import 'package:sihama/sihama_shell.dart';
 
 void main() {
+  testWidgets('diagnosis dataset parses all bundled records', (
+    WidgetTester tester,
+  ) async {
+    final references = await tester.runAsync(() async {
+      final source = await rootBundle.loadString(DiagnosisDataset.assetPath);
+      return DiagnosisDataset.parse(source);
+    });
+    expect(references, isNotNull);
+    final dataset = references!;
+    final aphids = dataset.singleWhere(
+      (reference) => reference.slug == 'blattlaeuse',
+    );
+
+    expect(dataset, hasLength(79));
+    expect(aphids.name, isNot(contains('Aphid')));
+    expect(aphids.category, 'Hama');
+    expect(aphids.typicalCauses, contains('semut'));
+    expect(dataset.map((reference) => reference.slug).toSet(), hasLength(79));
+  });
+
+  testWidgets('adviser can add a persistent diagnosis reference', (
+    WidgetTester tester,
+  ) async {
+    final repository = _MemoryRepository();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SihamaShell(repository: repository, role: SihamaRole.penyuluh),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Basis Data'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Tambah referensi'));
+    await tester.pumpAndSettle();
+
+    final fields = find.byType(TextFormField);
+    await tester.enterText(fields.at(0), 'powdery-mildew');
+    await tester.enterText(fields.at(1), 'Embun tepung');
+    await tester.enterText(fields.at(2), 'Penyakit / jamur');
+    await tester.tap(find.text('Simpan'));
+    await tester.pumpAndSettle();
+
+    expect(repository.diagnosisReferences.single.name, 'Embun tepung');
+    expect(find.text('Embun tepung'), findsOneWidget);
+  });
+
+  testWidgets('diagnosis dropdown searches symptoms and shows matching onset', (
+    WidgetTester tester,
+  ) async {
+    final repository = _MemoryRepository();
+    repository.diagnosisReferences.addAll(const [
+      DiagnosisReference(
+        slug: 'antraknosa',
+        name: 'Antraknosa',
+        category: 'Penyakit / jamur',
+        shortDescription: 'Infeksi jamur pada tanaman.',
+        affectedPlantParts: 'Daun dan batang',
+        growthPhase: 'Semua fase',
+        firstSymptoms: 'Bercak cokelat cekung pada daun.',
+        typicalCauses: 'Kondisi lembap berkepanjangan.',
+        moreInfo: '',
+      ),
+      DiagnosisReference(
+        slug: 'kutu-daun',
+        name: 'Kutu daun',
+        category: 'Hama',
+        shortDescription: 'Serangga kecil pada tunas.',
+        affectedPlantParts: 'Tunas muda',
+        growthPhase: 'Fase pertumbuhan',
+        firstSymptoms: 'Kelompok serangga kecil di ujung tunas.',
+        typicalCauses: 'Tanaman terinfeksi.',
+        moreInfo: '',
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SihamaShell(repository: repository, role: SihamaRole.penyuluh),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Padi sawah - Petak Utara'));
+    await tester.pumpAndSettle();
+
+    final diagnosisPicker = find.byKey(const ValueKey('diagnosis-picker'));
+    await tester.ensureVisible(diagnosisPicker);
+    await tester.tap(diagnosisPicker);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('diagnosis-search')),
+      'cokelat',
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Antraknosa'), findsOneWidget);
+    expect(find.text('Kutu daun'), findsNothing);
+    await tester.tap(find.text('Antraknosa'));
+    await tester.pumpAndSettle();
+    expect(find.text('Bercak cokelat cekung pada daun.'), findsOneWidget);
+
+    final recommendationField = find.byWidgetPredicate(
+      (widget) =>
+          widget is TextField &&
+          widget.decoration?.hintText ==
+              'Tulis rekomendasi yang akan diterima petani',
+    );
+    await tester.enterText(recommendationField, 'Pantau kelembapan tanaman.');
+    await tester.drag(find.byType(ListView).last, const Offset(0, -600));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Simpan Diagnosis'));
+    await tester.pumpAndSettle();
+    expect(repository.reports.first.diagnosis, 'Antraknosa');
+  });
+
+  testWidgets('reporter can search and select dataset initial symptoms', (
+    WidgetTester tester,
+  ) async {
+    final repository = _MemoryRepository();
+    repository.diagnosisReferences.addAll(const [
+      DiagnosisReference(
+        slug: 'antraknosa',
+        name: 'Antraknosa',
+        category: 'Penyakit / jamur',
+        shortDescription: 'Infeksi jamur pada tanaman.',
+        affectedPlantParts: 'Daun dan batang',
+        growthPhase: 'Semua fase',
+        firstSymptoms:
+            'Bercak cokelat cekung pada daun; Daun menguning di ujung.',
+        typicalCauses: 'Kondisi lembap berkepanjangan.',
+        moreInfo: '',
+      ),
+      DiagnosisReference(
+        slug: 'kutu-daun',
+        name: 'Kutu daun',
+        category: 'Hama',
+        shortDescription: 'Serangga kecil pada tunas.',
+        affectedPlantParts: 'Tunas muda',
+        growthPhase: 'Fase pertumbuhan',
+        firstSymptoms: 'Kelompok serangga kecil di ujung tunas.',
+        typicalCauses: 'Tanaman terinfeksi.',
+        moreInfo: '',
+      ),
+    ]);
+
+    await tester.pumpWidget(SihamaApp(repository: repository));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Masuk'));
+    await tester.tap(find.text('Masuk'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Buat Laporan Sekarang'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('report-symptom-picker')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('symptom-search')),
+      'menguning',
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Daun menguning di ujung.'), findsOneWidget);
+    expect(find.text('Bercak cokelat cekung pada daun'), findsNothing);
+    expect(find.text('Kelompok serangga kecil di ujung tunas.'), findsNothing);
+    await tester.tap(find.text('Daun menguning di ujung.'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Terapkan gejala (1)'));
+    await tester.pumpAndSettle();
+    expect(find.text('Daun menguning di ujung.'), findsOneWidget);
+  });
+
+  testWidgets('diagnosis detail stays left aligned on narrow screens', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    final repository = _MemoryRepository();
+    repository.diagnosisReferences.add(
+      const DiagnosisReference(
+        slug: 'agas-jamur',
+        name: 'Agas jamur (lalat hitam media tanam)',
+        category: 'Hama',
+        shortDescription: 'Lalat hitam kecil yang larvanya memakan rambut akar dan bahan organik di substrat yang lembap.',
+        affectedPlantParts: 'Rambut akar; permukaan substrat',
+        growthPhase: 'Semua fase; terutama saat substrat terus lembap',
+        firstSymptoms:
+            'Lalat hitam kecil beterbangan; pertumbuhan sedikit melambat',
+        typicalCauses: 'Permukaan substrat terlalu lembap; bahan organik menjadi sumber makanan larva',
+        moreInfo: 'https://plantclue.com/a-very-long-diagnosis-reference-url/',
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SihamaShell(repository: repository, role: SihamaRole.penyuluh),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Basis Data'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Agas jamur (lalat hitam media tanam)'));
+    await tester.pumpAndSettle();
+
+    final labelPosition = tester.getTopLeft(
+      find.text('Bagian tanaman terdampak'),
+    );
+    final valuePosition = tester.getTopLeft(find.text('Rambut akar'));
+    expect((labelPosition.dx - valuePosition.dx).abs(), lessThan(20));
+    expect(tester.takeException(), isNull);
+
+    tester.view.resetPhysicalSize();
+    tester.view.resetDevicePixelRatio();
+  });
+
   test('report image validation accepts only supported image formats', () {
     final png = ReportImage(name: 'plant.PNG', bytes: _samplePng);
     final jpeg = ReportImage(
@@ -77,6 +292,8 @@ void main() {
       customerName: 'Budi Santoso',
       date: DateTime(2025, 5, 13),
       status: 'Dipesan',
+      customerPhone: '08123456789',
+      deliveryAddress: 'Jl. Raya Bogor No. 10',
       items: const [
         MarketOrderItem(
           productId: 2,
@@ -91,9 +308,18 @@ void main() {
 
     expect(restored.id, order.id);
     expect(restored.status, 'Dipesan');
+    expect(restored.customerPhone, '08123456789');
+    expect(restored.deliveryAddress, 'Jl. Raya Bogor No. 10');
     expect(restored.total, 144000);
     expect(restored.items.single.productName, 'Nordox 56 WP');
     expect(restored.items.single.quantity, 2);
+
+    final oldMap = Map<String, Object?>.from(order.toMap())
+      ..remove('customer_phone')
+      ..remove('delivery_address');
+    final restoredOldOrder = MarketOrder.fromMap(oldMap);
+    expect(restoredOldOrder.customerPhone, isEmpty);
+    expect(restoredOldOrder.deliveryAddress, isEmpty);
   });
 
   testWidgets('SIHAMA navigation opens the requested sections', (
@@ -189,6 +415,52 @@ void main() {
     expect(find.text('Budi Baru'), findsOneWidget);
   });
 
+  testWidgets(
+    'AgriMarket groups diagnosis recommendations and tracks quantity',
+    (WidgetTester tester) async {
+      final repository = _MemoryRepository();
+      final report = repository.reports.first;
+      repository.reports[0] = CropReport(
+        id: report.id,
+        crop: report.crop,
+        location: report.location,
+        description: report.description,
+        date: report.date,
+        status: 'Selesai Ditinjau',
+        recommendation: 'Obat yang disarankan: Nordox 56 WP',
+      );
+
+      await tester.pumpWidget(SihamaApp(repository: repository));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Masuk'));
+      await tester.tap(find.text('Masuk'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('AgriMarket'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Direkomendasikan'), findsNWidgets(2));
+      expect(find.text('Nordox 56 WP'), findsOneWidget);
+      expect(
+        find.text(
+          'Pemesanan akan tersedia setelah laporan tanaman selesai ditinjau.',
+        ),
+        findsNothing,
+      );
+
+      await tester.drag(find.byType(ListView).first, const Offset(0, -250));
+      await tester.pumpAndSettle();
+      final addToCart = find.byTooltip('Tambah Nordox 56 WP ke keranjang');
+      await tester.ensureVisible(addToCart);
+      await tester.tap(addToCart);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Lanjutkan pesanan (1)'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Kurangi Nordox 56 WP dari keranjang'));
+      await tester.pumpAndSettle();
+      expect(find.text('Keranjang kosong'), findsOneWidget);
+    },
+  );
+
   testWidgets('Mitra Toko can create, edit, and delete products', (
     WidgetTester tester,
   ) async {
@@ -283,7 +555,12 @@ void main() {
       status: 'Selesai Ditinjau',
     );
     await tester.pumpWidget(
-      SihamaApp(key: const ValueKey('reporter'), repository: repository),
+      SihamaApp(
+        key: const ValueKey('reporter'),
+        repository: repository,
+        imagePicker: () async =>
+            ReportImage(name: 'transfer.png', bytes: _samplePng),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -299,12 +576,35 @@ void main() {
     expect(find.byType(AlertDialog), findsNothing);
     await tester.tap(find.textContaining('Lanjutkan pesanan'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Buat pesanan'));
+    expect(find.text('Detail pesanan'), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const ValueKey('checkout-phone')),
+      '08123456789',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('checkout-address')),
+      'Jl. Raya Bogor No. 10',
+    );
+    await tester.drag(find.byType(ListView).last, const Offset(0, -600));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('checkout-place-order')));
+    await tester.pumpAndSettle();
+    expect(find.text('Bukti transfer wajib diunggah.'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('checkout-upload-proof')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('checkout-place-order')));
     await tester.pumpAndSettle();
 
     final placedOrder = repository.orders.first;
     expect(placedOrder.status, 'Dipesan');
+    expect(placedOrder.customerName, 'Budi Santoso');
+    expect(placedOrder.customerPhone, '08123456789');
+    expect(placedOrder.deliveryAddress, 'Jl. Raya Bogor No. 10');
+    expect(placedOrder.transferProofBytes, isNotNull);
     expect(repository.products.first.stock, 41);
+    expect(find.text('Penerima & alamat pengiriman'), findsOneWidget);
+    expect(find.text('08123456789'), findsOneWidget);
+    expect(find.text('Jl. Raya Bogor No. 10'), findsOneWidget);
 
     await tester.pumpWidget(
       SihamaApp(key: const ValueKey('shop'), repository: repository),
@@ -318,6 +618,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.textContaining(placedOrder.id));
     await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView).last, const Offset(0, -800));
+    await tester.pumpAndSettle();
+    expect(find.text('Penerima & alamat pengiriman'), findsOneWidget);
+    expect(find.text('08123456789'), findsOneWidget);
+    expect(find.text('Jl. Raya Bogor No. 10'), findsOneWidget);
     await tester.tap(find.text('Konfirmasi pesanan'));
     await tester.pumpAndSettle();
 
@@ -332,9 +637,23 @@ void main() {
   testWidgets('submitting a report adds it to history', (
     WidgetTester tester,
   ) async {
+    final repository = _MemoryRepository();
+    repository.diagnosisReferences.add(
+      const DiagnosisReference(
+        slug: 'bercak-cekung',
+        name: 'Bercak cekung pada buah',
+        category: 'Penyakit / jamur',
+        shortDescription: 'Gejala berupa bercak cekung pada buah.',
+        affectedPlantParts: 'Buah',
+        growthPhase: 'Fase pembungaan',
+        firstSymptoms: 'Bercak cekung pada buah',
+        typicalCauses: 'Infeksi jamur.',
+        moreInfo: '',
+      ),
+    );
     await tester.pumpWidget(
       SihamaApp(
-        repository: _MemoryRepository(),
+        repository: repository,
         imagePicker: () async =>
             ReportImage(name: 'plant.png', bytes: _samplePng),
       ),
@@ -377,7 +696,7 @@ void main() {
     final formList = find.byType(ListView).first;
     await tester.drag(formList, const Offset(0, -450));
     await tester.pumpAndSettle();
-    final submitButton = find.byType(FilledButton);
+    final submitButton = find.text('Kirim laporan');
     await tester.ensureVisible(submitButton);
     await tester.tap(submitButton);
     await tester.pumpAndSettle();
@@ -425,6 +744,8 @@ class _MemoryRepository implements SihamaRepository {
       status: 'Diajukan',
     ),
   ];
+
+  final diagnosisReferences = <DiagnosisReference>[];
 
   final products = <MarketProduct>[
     const MarketProduct(
@@ -502,6 +823,27 @@ class _MemoryRepository implements SihamaRepository {
   @override
   Future<void> deleteReport(String id) async =>
       reports.removeWhere((item) => item.id == id);
+
+  @override
+  Future<List<DiagnosisReference>> getDiagnosisReferences() async =>
+      List.of(diagnosisReferences);
+
+  @override
+  Future<void> createDiagnosisReference(DiagnosisReference reference) async =>
+      diagnosisReferences.add(reference);
+
+  @override
+  Future<void> updateDiagnosisReference(DiagnosisReference reference) async {
+    final index = diagnosisReferences.indexWhere(
+      (item) => item.slug == reference.slug,
+    );
+    if (index < 0) throw StateError('Diagnosis reference not found');
+    diagnosisReferences[index] = reference;
+  }
+
+  @override
+  Future<void> deleteDiagnosisReference(String slug) async =>
+      diagnosisReferences.removeWhere((item) => item.slug == slug);
 
   @override
   Future<List<MarketProduct>> getProducts() async => List.of(products);

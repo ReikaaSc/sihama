@@ -192,6 +192,8 @@ class MarketOrder {
     required this.date,
     required this.status,
     required this.items,
+    this.customerPhone = '',
+    this.deliveryAddress = '',
     this.transferProofBytes,
   });
 
@@ -200,6 +202,8 @@ class MarketOrder {
   final DateTime date;
   final String status;
   final List<MarketOrderItem> items;
+  final String customerPhone;
+  final String deliveryAddress;
   final Uint8List? transferProofBytes;
 
   int get total => items.fold(0, (sum, item) => sum + item.total);
@@ -210,6 +214,8 @@ class MarketOrder {
     date: date,
     status: status ?? this.status,
     items: items,
+    customerPhone: customerPhone,
+    deliveryAddress: deliveryAddress,
     transferProofBytes: transferProofBytes,
   );
 
@@ -220,6 +226,8 @@ class MarketOrder {
     'status': status,
     'items': jsonEncode(items.map((item) => item.toMap()).toList()),
     'total': total,
+    'customer_phone': customerPhone,
+    'delivery_address': deliveryAddress,
     'transfer_proof_bytes': transferProofBytes,
   };
 
@@ -230,6 +238,8 @@ class MarketOrder {
       customerName: map['customer_name']! as String,
       date: DateTime.parse(map['date']! as String),
       status: map['status']! as String,
+      customerPhone: (map['customer_phone'] as String?) ?? '',
+      deliveryAddress: (map['delivery_address'] as String?) ?? '',
       items: decodedItems
           .map(
             (item) =>
@@ -281,6 +291,55 @@ class ChatMessage {
   );
 }
 
+class DiagnosisReference {
+  const DiagnosisReference({
+    required this.slug,
+    required this.name,
+    required this.category,
+    required this.shortDescription,
+    required this.affectedPlantParts,
+    required this.growthPhase,
+    required this.firstSymptoms,
+    required this.typicalCauses,
+    required this.moreInfo,
+  });
+
+  final String slug;
+  final String name;
+  final String category;
+  final String shortDescription;
+  final String affectedPlantParts;
+  final String growthPhase;
+  final String firstSymptoms;
+  final String typicalCauses;
+  final String moreInfo;
+
+  Map<String, Object?> toMap() => {
+    'slug': slug,
+    'name': name,
+    'category': category,
+    'short_description': shortDescription,
+    'affected_plant_parts': affectedPlantParts,
+    'growth_phase': growthPhase,
+    'first_symptoms': firstSymptoms,
+    'typical_causes': typicalCauses,
+    'more_info': moreInfo,
+  };
+
+  factory DiagnosisReference.fromMap(Map<String, Object?> map) =>
+      DiagnosisReference(
+        slug: map['slug']! as String,
+        name: map['name']! as String,
+        category: map['category']! as String,
+        shortDescription: map['short_description']! as String,
+        affectedPlantParts: map['affected_plant_parts']! as String,
+        growthPhase: map['growth_phase']! as String,
+        firstSymptoms: map['first_symptoms']! as String,
+        typicalCauses: map['typical_causes']! as String,
+        moreInfo: map['more_info']! as String,
+      );
+}
+
 abstract interface class SihamaChatRepository {
   Future<List<ChatMessage>> getChatMessages(String reportId);
   Future<void> addChatMessage(ChatMessage message);
@@ -292,6 +351,10 @@ abstract interface class SihamaRepository {
   Future<void> createReport(CropReport report);
   Future<void> updateReport(CropReport report);
   Future<void> deleteReport(String id);
+  Future<List<DiagnosisReference>> getDiagnosisReferences();
+  Future<void> createDiagnosisReference(DiagnosisReference reference);
+  Future<void> updateDiagnosisReference(DiagnosisReference reference);
+  Future<void> deleteDiagnosisReference(String slug);
   Future<List<MarketProduct>> getProducts();
   Future<int> createProduct(MarketProduct product);
   Future<void> updateProduct(MarketProduct product);
