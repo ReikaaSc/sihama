@@ -37,6 +37,21 @@ Example reports, products, profiles, and shop orders are inserted when the
 database is first created. Adviser reference entries and sample notification
 messages remain prototype-only and are not stored in SQLite.
 
+## Source architecture and auth storage
+
+The app bootstrap lives in `lib/main.dart`, while `lib/app.dart` composes the
+root application. Cross-feature configuration, theme, constants, and secure
+session storage are in `lib/core/`; business modules are grouped under
+`lib/features/`, with shared models, repository contracts, and widgets under
+`lib/shared/`.
+
+Supabase sessions and PKCE verifiers use `flutter_secure_storage`. On first
+startup, any matching legacy values in `SharedPreferences` are migrated and
+removed. Override the public Supabase client settings at build time with
+`--dart-define=SUPABASE_URL=...` and
+`--dart-define=SUPABASE_PUBLISHABLE_KEY=...`; production data access must still
+be protected by Supabase RLS policies.
+
 ## Run and test
 
 ```powershell

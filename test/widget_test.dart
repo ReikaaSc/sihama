@@ -4,13 +4,14 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:sihama/auth_screen.dart';
-import 'package:sihama/data/diagnosis_dataset.dart';
-import 'package:sihama/data/report_image.dart';
-import 'package:sihama/data/sihama_repository.dart';
-import 'package:sihama/main.dart';
-import 'package:sihama/data/sihama_role.dart';
-import 'package:sihama/sihama_shell.dart';
+import 'package:sihama/app.dart';
+import 'package:sihama/features/auth/domain/entities/sihama_role.dart';
+import 'package:sihama/features/auth/presentation/screens/auth_screen.dart';
+import 'package:sihama/features/diagnosis/data/datasources/diagnosis_dataset.dart';
+import 'package:sihama/features/reports/data/datasources/report_image.dart';
+import 'package:sihama/features/sihama/presentation/screens/sihama_shell.dart';
+import 'package:sihama/shared/domain/repositories/sihama_repository.dart';
+import 'package:sihama/shared/models/sihama_models.dart';
 
 void main() {
   testWidgets('auth screen shows logo and validates email before signup', (
@@ -136,6 +137,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Bercak cokelat cekung pada daun.'), findsOneWidget);
 
+    await tester.ensureVisible(find.text('Kocide 54 WDG'));
+    await tester.tap(find.text('Kocide 54 WDG'));
+    await tester.pumpAndSettle();
     final recommendationField = find.byWidgetPredicate(
       (widget) =>
           widget is TextField &&
@@ -148,6 +152,12 @@ void main() {
     await tester.tap(find.text('Simpan Diagnosis'));
     await tester.pumpAndSettle();
     expect(repository.reports.first.diagnosis, 'Antraknosa');
+    expect(
+      repository.diagnosisReferences
+          .singleWhere((reference) => reference.slug == 'antraknosa')
+          .medicineIds,
+      [1],
+    );
   });
 
   testWidgets('reporter can search and select dataset initial symptoms', (
@@ -346,6 +356,27 @@ void main() {
     expect(restoredOldOrder.deliveryAddress, isEmpty);
   });
 
+  test('diagnosis reference map conversion preserves medicine relations', () {
+    const reference = DiagnosisReference(
+      slug: 'antraknosa',
+      name: 'Antraknosa',
+      category: 'Penyakit / jamur',
+      shortDescription: 'Infeksi jamur pada tanaman.',
+      affectedPlantParts: 'Daun',
+      growthPhase: 'Semua fase',
+      firstSymptoms: 'Bercak cokelat',
+      typicalCauses: 'Kondisi lembap.',
+      moreInfo: '',
+      symptomIds: [4, 8],
+      medicineIds: [2, 5],
+    );
+
+    final restored = DiagnosisReference.fromMap(reference.toMap());
+
+    expect(restored.medicineIds, [2, 5]);
+    expect(restored.symptomIds, [4, 8]);
+  });
+
   testWidgets('SIHAMA navigation opens the requested sections', (
     WidgetTester tester,
   ) async {
@@ -441,6 +472,45 @@ void main() {
     expect(find.text('Budi Baru'), findsOneWidget);
   });
 
+  testWidgets('reporter sees report status as read-only when editing', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(SihamaApp(repository: _MemoryRepository()));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Masuk'));
+    await tester.tap(find.text('Masuk'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Laporan'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Padi sawah - Petak Utara'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ubah Gejala'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Status laporan'), findsOneWidget);
+    expect(find.byType(DropdownButtonFormField<String>), findsOneWidget);
+  });
+
+  testWidgets('chat composer hides the unavailable attachment action', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(SihamaApp(repository: _MemoryRepository()));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Masuk'));
+    await tester.tap(find.text('Masuk'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Percakapan'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.text('Belum ada pesan. Ketuk untuk memulai percakapan.'),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Tulis pesan...'), findsOneWidget);
+    expect(find.byIcon(Icons.add_photo_alternate_outlined), findsNothing);
+    expect(find.text('Ubah gejala'), findsNothing);
+  });
+
   testWidgets('all roles show account identity and data-backed notifications', (
     WidgetTester tester,
   ) async {
@@ -492,6 +562,210 @@ void main() {
       await tester.scrollUntilVisible(find.text('akun@example.com'), 200);
       expect(find.text('akun@example.com'), findsOneWidget);
     }
+  });
+
+  testWidgets('role-specific profile fields are saved for advisers and shops', (
+    WidgetTester tester,
+  ) async {
+    for (final role in [SihamaRole.penyuluh, SihamaRole.mitraToko]) {
+      final repository = _MemoryRepository()..profile = null;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SihamaShell(
+            key: ValueKey(role),
+            repository: repository,
+            role: role,
+            userName: 'Akun ${role.label}',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Profil'));
+      await tester.pumpAndSettle();
+      final createProfileButton = find.ancestor(
+        of: find.text('Buat profil'),
+        matching: find.byType(FilledButton),
+      );
+      final profileList = find.ancestor(
+        of: createProfileButton,
+        matching: find.byType(ListView),
+      );
+      await tester.drag(profileList, const Offset(0, -350));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(createProfileButton);
+      await tester.tap(createProfileButton);
+      await tester.pumpAndSettle();
+
+      final dialog = find.byType(AlertDialog);
+      await tester.enterText(
+        find.descendant(of: dialog, matching: find.byType(TextFormField)).at(0),
+        'Nama ${role.label}',
+      );
+      await tester.enterText(
+        find.descendant(of: dialog, matching: find.byType(TextFormField)).at(2),
+        'Bogor',
+      );
+      if (role == SihamaRole.penyuluh) {
+        await tester.enterText(
+          find.byKey(const ValueKey('profile-certification')),
+          'SERT-123',
+        );
+        await tester.enterText(
+          find.byKey(const ValueKey('profile-institution')),
+          'Dinas Pertanian',
+        );
+      } else {
+        await tester.enterText(
+          find.byKey(const ValueKey('profile-shop-name')),
+          'Toko Tani',
+        );
+        await tester.enterText(
+          find.byKey(const ValueKey('profile-legality')),
+          'NIB-456',
+        );
+      }
+      await tester.tap(find.text('Simpan'));
+      await tester.pumpAndSettle();
+
+      expect(repository.profile?.name, 'Nama ${role.label}');
+      if (role == SihamaRole.penyuluh) {
+        expect(repository.profile?.certification, 'SERT-123');
+        expect(repository.profile?.institution, 'Dinas Pertanian');
+      } else {
+        expect(repository.profile?.shopName, 'Toko Tani');
+        expect(repository.profile?.legality, 'NIB-456');
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    }
+  });
+
+  testWidgets('registered name replaces the default profile name', (
+    WidgetTester tester,
+  ) async {
+    final repository = _MemoryRepository()
+      ..profile = const FarmerProfile(
+        name: 'Pengguna SIHAMA',
+        role: 'Petani',
+        region: '',
+        phone: '',
+        address: '',
+      );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SihamaShell(
+          repository: repository,
+          role: SihamaRole.pelapor,
+          userName: 'Abian Terdaftar',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Profil').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Abian Terdaftar'), findsOneWidget);
+    expect(find.text('Pengguna SIHAMA'), findsNothing);
+  });
+
+  testWidgets('refreshes shared account data every five seconds', (
+    WidgetTester tester,
+  ) async {
+    final repository = _MemoryRepository();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SihamaShell(repository: repository, role: SihamaRole.pelapor),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(repository.reportReadCount, 1);
+
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    expect(repository.reportReadCount, greaterThan(1));
+  });
+
+  testWidgets(
+    'account deletion requires two confirmations, password, and five seconds',
+    (WidgetTester tester) async {
+      final repository = _MemoryRepository();
+      var logoutCalled = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SihamaShell(
+            repository: repository,
+            role: SihamaRole.pelapor,
+            onLogout: () async => logoutCalled = true,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Profil').last);
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Hapus akun'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('Hapus akun'));
+      await tester.pumpAndSettle();
+      expect(find.text('Langkah 1 dari 2'), findsOneWidget);
+
+      await tester.tap(find.text('Lanjutkan'));
+      await tester.pumpAndSettle();
+      expect(find.text('Langkah 2 dari 2'), findsOneWidget);
+      await tester.enterText(find.byType(TextFormField).at(0), 'password-uji');
+      await tester.enterText(find.byType(TextFormField).at(1), 'HAPUS AKUN');
+
+      final waitingButton = find.widgetWithText(FilledButton, 'Tunggu 5s');
+      expect(waitingButton, findsOneWidget);
+      expect(tester.widget<FilledButton>(waitingButton).onPressed, isNull);
+      for (var second = 0; second < 5; second++) {
+        await tester.pump(const Duration(seconds: 1));
+      }
+
+      final deleteButton = find.widgetWithText(FilledButton, 'Hapus akun');
+      await tester.enterText(find.byType(TextFormField).at(1), 'HAPUS');
+      await tester.tap(deleteButton);
+      await tester.pumpAndSettle();
+      expect(find.text('Ketik HAPUS AKUN dengan tepat.'), findsOneWidget);
+      expect(repository.profile, isNotNull);
+
+      await tester.enterText(find.byType(TextFormField).at(1), 'HAPUS AKUN');
+      await tester.tap(deleteButton);
+      await tester.pumpAndSettle();
+      expect(repository.profile, isNull);
+      expect(logoutCalled, isTrue);
+    },
+  );
+
+  testWidgets('product search filters by name, category, and clears', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(SihamaApp(repository: _MemoryRepository()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Mitra Toko'));
+    await tester.ensureVisible(find.text('Masuk'));
+    await tester.tap(find.text('Masuk'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Produk'));
+    await tester.pumpAndSettle();
+
+    final search = find.byKey(const ValueKey('market-product-search'));
+    await tester.enterText(search, '  fungisida  ');
+    await tester.pumpAndSettle();
+    expect(find.text('Score 250 EC'), findsOneWidget);
+    expect(find.text('Kocide 54 WDG'), findsNothing);
+
+    await tester.enterText(search, 'kocide');
+    await tester.pumpAndSettle();
+    expect(find.text('Kocide 54 WDG'), findsOneWidget);
+    expect(find.text('Nordox 56 WP'), findsNothing);
+
+    await tester.tap(find.byTooltip('Hapus pencarian produk'));
+    await tester.pumpAndSettle();
+    expect(find.text('Nordox 56 WP'), findsOneWidget);
   });
 
   testWidgets(
@@ -659,6 +933,14 @@ void main() {
     await tester.tap(find.textContaining('Lanjutkan pesanan'));
     await tester.pumpAndSettle();
     expect(find.text('Detail pesanan'), findsOneWidget);
+    final reviewedReportSelector = find
+        .byType(DropdownButtonFormField<String>)
+        .first;
+    await tester.ensureVisible(reviewedReportSelector);
+    await tester.tap(reviewedReportSelector);
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining(report.id).last);
+    await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const ValueKey('checkout-phone')),
       '08123456789',
@@ -679,6 +961,7 @@ void main() {
 
     final placedOrder = repository.orders.first;
     expect(placedOrder.status, 'Dipesan');
+    expect(placedOrder.reportId, report.id);
     expect(placedOrder.customerName, 'Budi Santoso');
     expect(placedOrder.customerPhone, '08123456789');
     expect(placedOrder.deliveryAddress, 'Jl. Raya Bogor No. 10');
@@ -720,6 +1003,8 @@ void main() {
     WidgetTester tester,
   ) async {
     final repository = _MemoryRepository();
+    final existingReportCount = repository.reports.length;
+    repository.reportCreateDelay = const Duration(seconds: 1);
     repository.diagnosisReferences.add(
       const DiagnosisReference(
         slug: 'bercak-cekung',
@@ -778,11 +1063,24 @@ void main() {
     final formList = find.byType(ListView).first;
     await tester.drag(formList, const Offset(0, -450));
     await tester.pumpAndSettle();
-    final submitButton = find.text('Kirim laporan');
+    final submitButton = find.byKey(const ValueKey('submit-report-button'));
     await tester.ensureVisible(submitButton);
     await tester.tap(submitButton);
+    await tester.pump();
+    expect(find.text('Mengirim laporan...'), findsOneWidget);
+    expect(tester.widget<FilledButton>(submitButton).onPressed, isNull);
+    expect(repository.reportCreateCallCount, 1);
+    await tester.pump(const Duration(seconds: 1));
     await tester.pumpAndSettle();
 
+    expect(find.text('Laporan berhasil dikirim'), findsOneWidget);
+    expect(repository.reports, hasLength(existingReportCount + 1));
+    expect(repository.reports.first.symptomIds, [1]);
+    await tester.tap(find.text('Lihat detail laporan'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Laporan L-'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
     expect(find.text('Riwayat laporan'), findsOneWidget);
     expect(find.text('Petak Selatan'), findsOneWidget);
 
@@ -816,6 +1114,11 @@ final _samplePng = Uint8List.fromList(
 );
 
 class _MemoryRepository implements SihamaRepository {
+  int reportReadCount = 0;
+  int reportCreateCallCount = 0;
+  Duration reportCreateDelay = Duration.zero;
+  final notifications = <SihamaNotification>[];
+
   final reports = <CropReport>[
     CropReport(
       id: 'SIH-240618',
@@ -889,11 +1192,20 @@ class _MemoryRepository implements SihamaRepository {
   Future<void> initialize() async {}
 
   @override
-  Future<List<CropReport>> getReports() async => List.of(reports);
+  Future<List<CropReport>> getReports() async {
+    reportReadCount++;
+    return List.of(reports);
+  }
 
   @override
-  Future<void> createReport(CropReport report) async =>
-      reports.insert(0, report);
+  Future<void> createReport(CropReport report) async {
+    reportCreateCallCount++;
+    if (reportCreateDelay > Duration.zero) {
+      await Future<void>.delayed(reportCreateDelay);
+    }
+    if (reports.any((existing) => existing.id == report.id)) return;
+    reports.insert(0, report);
+  }
 
   @override
   Future<void> updateReport(CropReport report) async {
@@ -909,6 +1221,20 @@ class _MemoryRepository implements SihamaRepository {
   @override
   Future<List<DiagnosisReference>> getDiagnosisReferences() async =>
       List.of(diagnosisReferences);
+
+  @override
+  Future<List<Symptom>> getSymptoms() async {
+    final names = diagnosisReferences
+        .expand((reference) => reference.firstSymptoms.split(';'))
+        .map((name) => name.trim())
+        .where((name) => name.isNotEmpty)
+        .toSet()
+        .toList();
+    return List.generate(
+      names.length,
+      (index) => Symptom(id: index + 1, name: names[index]),
+    );
+  }
 
   @override
   Future<void> createDiagnosisReference(DiagnosisReference reference) async =>
@@ -1035,4 +1361,52 @@ class _MemoryRepository implements SihamaRepository {
 
   @override
   Future<void> deleteProfile(int id) async => profile = null;
+
+  @override
+  Future<List<SihamaNotification>> getNotifications() async {
+    if (notifications.isNotEmpty) return List.of(notifications);
+    final generated = <SihamaNotification>[];
+    var id = 1;
+    for (final report in reports) {
+      generated.add(
+        SihamaNotification(
+          id: id++,
+          title: 'Laporan ${report.id}',
+          message: 'Status laporan diperbarui: ${report.status}',
+          date: report.date,
+          reportId: report.id,
+        ),
+      );
+    }
+    for (final order in orders.where((order) => order.status == 'Dipesan')) {
+      generated.add(
+        SihamaNotification(
+          id: id++,
+          title: 'Pesanan ${order.id} perlu diproses',
+          message: 'Pesanan dari ${order.customerName} menunggu diproses.',
+          date: order.date,
+          orderId: order.id,
+        ),
+      );
+    }
+    return generated;
+  }
+
+  @override
+  Future<void> markNotificationRead(int id) async {
+    final index = notifications.indexWhere(
+      (notification) => notification.id == id,
+    );
+    if (index < 0) throw StateError('Notification not found');
+    final notification = notifications[index];
+    notifications[index] = SihamaNotification(
+      id: notification.id,
+      title: notification.title,
+      message: notification.message,
+      date: notification.date,
+      reportId: notification.reportId,
+      orderId: notification.orderId,
+      isRead: true,
+    );
+  }
 }
